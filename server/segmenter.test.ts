@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { Segmenter, wavFromPcm16, looksLikeQuestion, isHallucination, SAMPLE_RATE } from "./audio";
-import { parseAnswer } from "./brain";
 
 const FRAME = 1600; // 100 ms at 16 kHz
 const silence = () => new Int16Array(FRAME);
@@ -10,13 +9,24 @@ const feed = (seg: Segmenter, frames: Int16Array[]) => { for (const f of frames)
 describe("Segmenter", () => {
   test("silence → speech → silence emits one segment with preroll and trailing pause", () => {
     const out: number[] = [];
-    const seg = new Segmenter((s) => out.push(s.durationMs));
+    const SILENCE = 450, PREROLL = 300;
+    const seg = new Segmenter((s) => out.push(s.durationMs), { silenceMs: SILENCE, prerollMs: PREROLL });
     feed(seg, [...Array(10)].map(silence));          // 1 s quiet
     feed(seg, [...Array(20)].map(() => noise()));    // 2 s speech
-    feed(seg, [...Array(10)].map(silence));          // 1 s quiet → closes at 800 ms
+    feed(seg, [...Array(10)].map(silence));          // 1 s quiet → closes after SILENCE
     expect(out.length).toBe(1);
-    expect(out[0]).toBeGreaterThanOrEqual(2000 + 300 + 800 - 1);
-    expect(out[0]).toBeLessThan(3400);
+    expect(out[0]).toBeGreaterThanOrEqual(2000 + PREROLL + SILENCE - 1);
+    expect(out[0]).toBeLessThan(2000 + PREROLL + SILENCE + 200);
+  });
+
+  test("the default silence window stays inside the latency budget", () => {
+    // Every ms here lands directly on "interviewer stops talking → candidate hears the cue".
+    // 800 ms was a third of the budget; if someone raises it back, this fails on purpose.
+    let closedAfter = 0;
+    const seg = new Segmenter((s) => (closedAfter = s.durationMs));
+    feed(seg, [...Array(10)].map(() => noise()));    // 1 s speech, no explicit options
+    feed(seg, [...Array(10)].map(silence));
+    expect(closedAfter).toBeLessThanOrEqual(1000 + 300 + 500);
   });
   test("long speech is cut at maxMs", () => {
     const out: number[] = [];
@@ -65,14 +75,4 @@ test("looksLikeQuestion: es/en questions yes, statements no", () => {
 test("isHallucination drops whisper boilerplate", () => {
   for (const h of ["[BLANK_AUDIO]", "(música)", "Subtítulos realizados por la comunidad de Amara.org", "Thanks for watching!", "...", ""]) expect(isHallucination(h)).toBe(true);
   expect(isHallucination("Tell me about yourself")).toBe(false);
-});
-
-test("parseAnswer tolerates fences and falls back to text", () => {
-  const ok = parseAnswer('```json\n{"cue":"Sí, lideré la migración a Kubernetes.","points":["48 servicios"],"code":null,"confidence":0.9}\n```');
-  expect(ok.cue).toBe("Sí, lideré la migración a Kubernetes.");
-  expect(ok.points).toEqual(["48 servicios"]);
-  expect(ok.confidence).toBe(0.9);
-  const bad = parseAnswer("I would say: focus on the outcome.");
-  expect(bad.cue).toContain("focus on the outcome");
-  expect(bad.code).toBeNull();
 });

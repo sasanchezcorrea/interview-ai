@@ -1,0 +1,189 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Interview AI · prueba de voz</title>
+<!-- Standalone verification surface for voice-client.js. Not the panel: it feeds the same
+     begin/push/end API the panel uses, but by hand and with the brain's real timing faked,
+     so a human can hear the result and read the time to first audio in milliseconds. -->
+<style>
+  :root { color-scheme: dark; --bg:#0d1117; --fg:#e6edf3; --dim:#8b949e; --line:#30363d; --ok:#3fb950; --warn:#d29922; --bad:#f85149; --acc:#58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  main { max-width: 880px; margin: 0 auto; display: grid; gap: 18px; }
+  h1 { font-size: 19px; margin: 0; font-weight: 600; }
+  h1 small { color: var(--dim); font-weight: 400; font-size: 13px; margin-left: 8px; }
+  .card { border:1px solid var(--line); border-radius:10px; padding:14px 16px; background:#0f151d; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  label { color:var(--dim); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  textarea { width:100%; min-height:96px; background:#010409; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:10px; font:inherit; resize:vertical; }
+  select, button { background:#21262d; color:var(--fg); border:1px solid var(--line); border-radius:7px; padding:7px 12px; font:inherit; cursor:pointer; }
+  select { max-width: 340px; }
+  button.go { background:var(--acc); color:#04121f; border-color:var(--acc); font-weight:600; }
+  button:disabled { opacity:.5; cursor:default; }
+  .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .m { border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:#010409; }
+  .m b { display:block; font-size:26px; font-variant-numeric:tabular-nums; font-weight:600; }
+  .m span { color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  #log { font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; max-height:230px; overflow:auto; white-space:pre-wrap; margin:0; color:var(--dim); }
+  #log b { color:var(--fg); font-weight:600; }
+  .pill { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); }
+  .pill.ok { color:var(--ok); border-color:#1f6f36; } .pill.warn { color:var(--warn); border-color:#6b5310; } .pill.bad { color:var(--bad); border-color:#7a2620; }
+  .clauses { display:flex; gap:6px; flex-wrap:wrap; }
+  .cl { font-size:12px; padding:3px 8px; border-radius:6px; border:1px solid var(--line); color:var(--dim); }
+  .cl.on { color:var(--fg); border-color:var(--acc); background:#0d2438; }
+  .hint { color:var(--dim); font-size:12px; margin:0; }
+</style>
+
+<main>
+  <h1>Prueba de voz <small>Interview AI · voice-client.js</small></h1>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div class="row">
+        <span id="engine" class="pill">comprobando…</span>
+        <span id="keystate" class="pill">—</span>
+      </div>
+      <button id="reload">Recargar estado</button>
+    </div>
+    <p class="hint" id="why" style="margin-top:8px"></p>
+  </div>
+
+  <div class="card">
+    <label for="text">Texto de la pista</label>
+    <textarea id="text">Sí, monté el orquestador multiagente en producción; el hub de C# reparte por SignalR, los agentes de Python hablan MCP, y el caché por token de usuario nos bajó la respuesta de siete segundos a menos de tres.</textarea>
+    <div class="row" style="margin-top:10px">
+      <label for="lang">Idioma</label>
+      <select id="lang">
+        <option value="es-ES">Español (España)</option>
+        <option value="en-US">Inglés (EE. UU.)</option>
+        <option value="en-GB">Inglés (Reino Unido)</option>
+      </select>
+      <label for="voice">Voz</label>
+      <select id="voice"></select>
+      <button class="go" id="go">Hablar en streaming</button>
+      <button id="stop">Parar</button>
+    </div>
+    <p class="hint" style="margin-top:10px">
+      Reparte el texto en cláusulas y las envía con el ritmo real del cerebro: la primera a los
+      880&nbsp;ms, las siguientes al ritmo al que se escriben. Es la prueba de que se empieza a oír
+      antes de que la frase esté terminada.
+    </p>
+    <div class="clauses" id="clauses" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card metrics">
+    <div class="m"><span>Primer audio (desde la 1.ª cláusula)</span><b id="m-ttfa">—</b></div>
+    <div class="m"><span>Primer audio (desde el clic)</span><b id="m-click">—</b></div>
+    <div class="m"><span>Cláusulas enviadas</span><b id="m-clauses">—</b></div>
+    <div class="m"><span>Motor</span><b id="m-engine" style="font-size:18px">—</b></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <label>Registro</label>
+      <button id="clear">Limpiar</button>
+    </div>
+    <pre id="log"></pre>
+  </div>
+</main>
+
+<script src="/voice-client.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const logEl = $("#log");
+function line(msg, strong) {
+  const t = new Date().toISOString().slice(11, 23);
+  logEl.insertAdjacentHTML("beforeend", `${t}  ${strong ? "<b>" + msg + "</b>" : msg}\n`);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+let clickAt = 0, timers = [];
+IAIVoice.configure({
+  onEvent(ev) {
+    if (ev.type === "first-audio") {
+      $("#m-ttfa").textContent = ev.ms + " ms";
+      $("#m-click").textContent = Math.round(performance.now() - clickAt) + " ms";
+      line(`primer audio · ${ev.ms} ms desde la primera cláusula · motor ${ev.engine}`, true);
+    }
+    if (ev.type === "engine") { $("#m-engine").textContent = ev.engine; line("motor: " + ev.engine + (ev.reason ? " — " + ev.reason : "")); }
+    if (ev.type === "voice") line(`voz elegida: ${ev.name} (${ev.tier}, score ${ev.score})`);
+    if (ev.type === "error") line(`error [${ev.where}]: ${ev.error}`);
+    if (ev.type === "end") line("fin del audio");
+  }
+});
+
+/* Same clause rule the panel uses, so this page exercises the real split: a dot between two
+   digits is a number, not a boundary. */
+function clauses(s) {
+  const out = []; let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (!",;:.?!—".includes(s[i])) continue;
+    if (s[i] === "." && /\d/.test(s[i - 1] || "") && /\d/.test(s[i + 1] || "")) continue;
+    out.push(s.slice(start, i + 1).trim()); start = i + 1;
+  }
+  const tail = s.slice(start).trim();
+  if (tail) out.push(tail);
+  return out.filter(Boolean);
+}
+
+async function refresh() {
+  const lang = $("#lang").value;
+  const v = await IAIVoice.voices(lang);
+  const h = v.health || {};
+  const el = h.provider === "elevenlabs";
+  $("#engine").textContent = el ? "ElevenLabs (streaming)" : "Voz del navegador";
+  $("#engine").className = "pill " + (el ? "ok" : "warn");
+  $("#keystate").textContent = h.keyPresent ? "clave presente" : "sin clave";
+  $("#keystate").className = "pill " + (h.keyPresent ? "ok" : "bad");
+  $("#why").textContent = h.lastError || (el ? `${h.model} · ${h.format} · ${h.wsUrl}` : "El panel usará speechSynthesis con la mejor voz instalada.");
+
+  const sel = $("#voice"); sel.innerHTML = "";
+  const add = (label, value, group) => {
+    let g = sel.querySelector(`optgroup[label="${group}"]`);
+    if (!g) { g = document.createElement("optgroup"); g.label = group; sel.append(g); }
+    const o = document.createElement("option"); o.textContent = label; o.value = value; g.append(o);
+  };
+  add("automática (la mejor instalada)", "", "Navegador");
+  v.browser.forEach((b) => add(`${b.name} · ${b.tier} · ${b.score}`, "b:" + b.name, "Navegador"));
+  const evs = (v.server && v.server.voices) || [];
+  if (evs.length) evs.forEach((e) => add(`${e.name}${e.category ? " · " + e.category : ""}`, "e:" + e.voice_id, "ElevenLabs"));
+  else add(v.server && v.server.reason ? "(" + v.server.reason.slice(0, 60) + ")" : "(ninguna)", "", "ElevenLabs");
+
+  const compact = v.browser.length && v.browser[0].tier === "compact";
+  line(`navegador: ${v.browser.length} voces para ${lang}` + (compact ? " — todas compactas, ninguna Premium/Mejorada instalada" : ""), compact);
+}
+
+$("#go").onclick = () => {
+  IAIVoice.cancel();
+  timers.forEach(clearTimeout); timers = [];
+  const lang = $("#lang").value;
+  const pick = $("#voice").value;
+  if (pick.startsWith("b:")) IAIVoice.prefer(lang, pick.slice(2));
+  const parts = clauses($("#text").value);
+  $("#clauses").innerHTML = parts.map((p, i) => `<span class="cl" id="cl${i}">${p}</span>`).join("");
+  $("#m-clauses").textContent = parts.length;
+  $("#m-ttfa").textContent = $("#m-click").textContent = "—";
+  clickAt = performance.now();
+  IAIVoice.begin({ lang, voiceId: pick.startsWith("e:") ? pick.slice(2) : undefined });
+  line(`begin(${lang}) · ${parts.length} cláusulas`, true);
+
+  // 880 ms to the first token, then ~35 ms per character — the rate the brain actually writes at.
+  let at = 880;
+  parts.forEach((p, i) => {
+    timers.push(setTimeout(() => {
+      document.getElementById("cl" + i).classList.add("on");
+      line(`push(+${Math.round(performance.now() - clickAt)} ms) ${p}`);
+      IAIVoice.push(p);
+      if (i === parts.length - 1) { IAIVoice.end(); line("end()"); }
+    }, at));
+    at += Math.max(180, p.length * 35);
+  });
+};
+$("#stop").onclick = () => { timers.forEach(clearTimeout); timers = []; IAIVoice.cancel(); line("cancel()"); };
+$("#clear").onclick = () => { logEl.textContent = ""; };
+$("#reload").onclick = () => IAIVoice.health().then(refresh);
+$("#lang").onchange = refresh;
+
+// Chrome fills getVoices() asynchronously; the first list is often empty.
+if (window.speechSynthesis) speechSynthesis.addEventListener("voiceschanged", refresh);
+refresh();
+</script>

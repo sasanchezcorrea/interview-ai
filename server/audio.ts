@@ -13,7 +13,7 @@ export interface SegmenterOptions {
   startThreshold: number; // RMS floor (0..1) below which nothing is ever "voiced"
 }
 
-const DEFAULTS: SegmenterOptions = { silenceMs: 800, maxMs: 8000, minSpeechMs: 400, prerollMs: 300, startThreshold: 0.012 };
+const DEFAULTS: SegmenterOptions = { silenceMs: 450, maxMs: 8000, minSpeechMs: 400, prerollMs: 300, startThreshold: 0.012 };
 
 export function rmsOf(f: Int16Array): number {
   let s = 0;
@@ -112,4 +112,51 @@ export function isHallucination(text: string): boolean {
   if (/^[\[(*].*[\])*]$/.test(t)) return true; // [BLANK_AUDIO], (música), *aplausos*
   if (/subt[ií]tulos|amara\.org|gracias por ver|thanks for watching|suscr[ií]b|subscribe|www\./i.test(t)) return true;
   return false;
+}
+
+// Bilingual base vocabulary always fed to whisper's --prompt: biases decoding toward interview/engineering
+// terms regardless of what's in the job description (covers loanwords JDs rarely spell out, e.g. "MCP", "RAG").
+const BASE_VOCAB =
+  "entrevista, currículum, experiencia, arquitectura, microservicios, despliegue, escalabilidad, " +
+  "multi-tenant, contenedor, interview, resume, architecture, microservices, deployment, scalability, " +
+  "performance, container, pipeline, backend, frontend, base de datos, database, Kubernetes, Docker, " +
+  "API, MCP, RAG, embeddings, LangGraph, machine learning, inteligencia artificial";
+
+// Sentence-initial capitalized words (The, We, Please...) aren't technical terms — skip the common ones so
+// they don't crowd out real tokens once the JD-derived list gets capped.
+const COMMON_CAPITALIZED = new Set([
+  "the", "a", "an", "we", "you", "our", "your", "this", "that", "they", "it", "please", "for", "in", "on",
+  "with", "and", "or", "but", "if", "when", "is", "are", "do", "does", "as", "at", "to", "of", "will", "have",
+]);
+
+const JD_TOKEN_RE = /\b[A-Za-z][A-Za-z0-9+#./-]*\b/g;
+
+function isTechnicalToken(tok: string): boolean {
+  if (tok.length < 2) return false;
+  if (/^[A-Z]{2,}$/.test(tok)) return true; // acronym: MCP, RAG, API
+  if (/\d/.test(tok)) return true; // versioned/technical: GPT-4, K8s
+  if (/[./#+-]/.test(tok)) return true; // Node.js, CI/CD, C++, C#
+  if (/^[A-Z][a-z]/.test(tok)) return !COMMON_CAPITALIZED.has(tok.toLowerCase()); // Kubernetes, Docker
+  return false;
+}
+
+/** Builds the whisper `--prompt` vocabulary hint: JD-specific terms (capped ~200 chars) + the base list. */
+export function domainPrompt(jd: string): string {
+  const seen = new Set<string>();
+  const terms: string[] = [];
+  for (const m of jd.matchAll(JD_TOKEN_RE)) {
+    const tok = m[0].replace(/[.,;:)]+$/, "");
+    if (!isTechnicalToken(tok)) continue;
+    const key = tok.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    terms.push(tok);
+  }
+  let jdPart = "";
+  for (const tok of terms) {
+    const next = jdPart ? `${jdPart}, ${tok}` : tok;
+    if (next.length > 200) break;
+    jdPart = next;
+  }
+  return jdPart ? `${jdPart}, ${BASE_VOCAB}` : BASE_VOCAB;
 }

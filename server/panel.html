@@ -89,6 +89,10 @@ main{flex:1; display:grid; grid-template-columns:minmax(260px,30%) 1fr; min-heig
   text-wrap:balance; margin:0; max-width:34ch;
 }
 #cue.idle{font-family:"IBM Plex Sans",sans-serif; font-weight:400; font-size:var(--step-1); line-height:1.6; color:var(--ink-3); max-width:52ch; letter-spacing:0}
+/* The cue arrives token by token: the caret says "sigue escribiendo" without moving the line. */
+.caret{display:inline-block; width:.06em; height:.78em; margin-left:.07em; vertical-align:-.04em; background:var(--tally); animation:caret 1.05s steps(2,start) infinite}
+@keyframes caret{50%{opacity:.2}}
+@media (prefers-reduced-motion:reduce){.caret{animation:none; opacity:.7}}
 #points{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:9px; max-width:62ch}
 #points li{position:relative; padding-left:17px; color:var(--ink-2)}
 #points li::before{content:""; position:absolute; left:0; top:.62em; width:6px; height:1px; background:var(--rail-hi)}
@@ -151,7 +155,8 @@ body.pip #cue{font-size:1.35rem}
     <div class="tally" id="tally"><i></i><span class="lbl" id="tally-text" style="color:inherit">en espera</span></div>
     <div class="readout"><span class="lbl">transcripción</span><b id="r-stt">—</b></div>
     <div class="readout"><span class="lbl">modelo</span><b id="r-model">—</b></div>
-    <div class="readout"><span class="lbl">latencia</span><b id="r-lat">—</b></div>
+    <div class="readout" id="ro-ft" style="min-width:64px"><span class="lbl">primer token</span><b id="r-ft">—</b></div>
+    <div class="readout" id="ro-lat" title="Aún sin medidas de latencia."><span class="lbl">pregunta → voz</span><b id="r-lat">—</b></div>
   </div>
 </header>
 
@@ -234,9 +239,12 @@ body.pip #cue{font-size:1.35rem}
 <video id="vid-tab" muted playsinline hidden></video><video id="vid-screen" muted playsinline hidden></video>
 
 <script>
-const $ = (s) => document.querySelector(s);
+// The stage is *moved* into the floating window, so its nodes leave this document. Look there too,
+// otherwise every cue token would throw while the panel floats.
+const $ = (s) => document.querySelector(s) || (S.pip ? S.pip.document.querySelector(s) : null);
 const S = { pipes: {}, streams: {}, audioWs: null, queue: [], shotTimer: null, lastThumb: null,
-            pip: null, lastCode: "", meterPrev: {}, noAudioSince: {}, shotWarned: false };
+            pip: null, lastCode: "", meterPrev: {}, noAudioSince: {}, shotWarned: false,
+            cue: null, ttsChain: Promise.resolve() };
 const CH = { them: 0, me: 1 };
 
 /* ── notices: nothing fails silently ─────────────────────────────────── */
@@ -282,15 +290,19 @@ function handle(ev) {
     case "meters": paintMeters(ev.meters); break;
     case "transcript": addTurn(ev); $("#r-stt").textContent = ev.sttMs + " ms"; break;
     case "thinking":
+      S.cue = null;                                     // a new round: nothing streamed or spoken yet
       $("#cuecard").classList.add("thinking"); setTally("live", ev.effort === "deep" ? "opus" : "sonnet");
       $("#cue-meta").textContent = `${ev.mode}${ev.shot ? " + pantalla" : ""} · ${ev.turns} turnos`;
       break;
+    case "cue-delta": cueDelta(ev); break;
+    case "cue-done": cueDone(ev); break;
     case "answer": showAnswer(ev); break;
+    case "latency": showLatency(ev); break;
     case "shot": showShot(ev.url, Date.now()); break;
     case "discard": $("#status").textContent = `Audio descartado por muy corto o mudo: "${ev.text}"`; break;
     case "status": if (ev.level && ev.level !== "info") notice(ev.message, "", ev.level); else $("#status").textContent = ev.message; break;
     case "settings": $("#t-auto").checked = ev.auto; $("#t-deep").checked = ev.effort === "deep"; break;
-    case "reset": $("#turns").innerHTML = ""; emptyLog(); $("#t-count").textContent = ""; brainInfo(ev.brain); notice("Nueva ronda", "Sesión y transcripción reiniciadas."); break;
+    case "reset": S.cue = null; speechSynthesis.cancel(); $("#turns").innerHTML = ""; emptyLog(); $("#t-count").textContent = ""; brainInfo(ev.brain); notice("Nueva ronda", "Sesión y transcripción reiniciadas."); break;
   }
 }
 function emptyLog() { $("#turns").innerHTML = '<p class="empty">Aún no ha entrado audio. Elige una fuente abajo.</p>'; }
@@ -343,19 +355,96 @@ function addTurn(t) {
   box.append(d); box.scrollTop = box.scrollHeight;
   $("#t-count").textContent = box.querySelectorAll(".turn").length;
 }
+/* ── the cue, token by token ──────────────────────────────────────────────
+   The first token lands ~880 ms after the interviewer stops talking. Both the line and the
+   voice start there; waiting for the whole answer is the difference between a copilot and a
+   transcript. The text node is appended to, never re-rendered, so a token costs nothing. */
+function cueStart() {
+  const el = $("#cue");
+  el.textContent = ""; el.classList.remove("idle");
+  const node = document.createTextNode("");
+  const caret = document.createElement("i"); caret.className = "caret";
+  el.append(node, caret);
+  speechSynthesis.cancel();                       // a new cue owns the voice queue outright
+  window.IAIVoice?.cancel();
+  S.cue = { text: "", spoken: 0, lang: null, node, caret, engineStarted: false };
+}
+function cueDelta(ev) {
+  if (!S.cue) cueStart();
+  const c = S.cue;
+  c.node.appendData(ev.chunk || "");
+  if (ev.cue && ev.cue !== c.node.data) c.node.data = ev.cue;   // chunks are the fast path, cue resyncs if one is lost
+  c.text = c.node.data;
+  flushClauses(false);
+}
+function cueDone(ev) {
+  if (S.cue?.engineStarted) window.IAIVoice?.end();
+  if (!S.cue) cueStart();
+  const c = S.cue;
+  if (typeof ev.cue === "string") { c.node.data = ev.cue; c.text = ev.cue; }
+  c.caret.remove();
+  flushClauses(true);
+}
+/** Speak each clause the moment it closes: the candidate opens their mouth mid-sentence. */
+function flushClauses(final) {
+  const c = S.cue;
+  let rest = c.text.slice(c.spoken);
+  if (final) { c.spoken = c.text.length; sayClause(rest); return; }
+  for (let i = nextBoundary(rest); i >= 0; i = nextBoundary(rest)) {
+    const piece = rest.slice(0, i + 1);
+    c.spoken += piece.length; rest = rest.slice(i + 1);
+    sayClause(piece);
+  }
+}
+// ponytail: digits either side of a dot are a number, not a clause ("3.5 s" stays one utterance).
+function nextBoundary(s) {
+  for (let i = 0; i < s.length; i++) {
+    if (!",;:.?!—".includes(s[i])) continue;
+    if (s[i] === "." && /\d/.test(s[i - 1] || "") && /\d/.test(s[i + 1] || "")) continue;
+    return i;
+  }
+  return -1;
+}
+function sayClause(piece) {
+  const t = (piece || "").trim();
+  if (!/[\p{L}\p{N}]/u.test(t)) return;           // a lone "—" or ":" has nothing to say
+  S.cue.lang = S.cue.lang || voiceLang(S.cue.text.slice(0, 40));  // decided once, so one cue keeps one voice
+  if (!$("#t-voice").checked) return;
+  if (window.IAIVoice && !$("#t-pulse").checked) {
+    // The streaming engine speaks a clause the moment it arrives and falls back to the browser
+    // voice by itself, so a missing key or a dead relay still gets the candidate a sentence.
+    if (!S.cue.engineStarted) { S.cue.engineStarted = true; window.IAIVoice.begin({ lang: S.cue.lang }); }
+    window.IAIVoice.push(t);
+    return;
+  }
+  speak(t, S.cue.lang);
+}
+
 function showAnswer(a) {
   $("#cuecard").classList.remove("thinking"); setTally("idle", "en espera");
   $("#r-model").textContent = (a.model || "").replace("claude-", "");
-  $("#r-lat").textContent = (a.ms / 1000).toFixed(1) + " s";
+  if (a.firstTokenMs != null) $("#r-ft").textContent = dur(a.firstTokenMs);
+  const streamed = !!(S.cue && S.cue.text);
   const cue = (a.cue || "").trim();
   $("#cue").textContent = cue || "Ese turno no pedía respuesta. Sigue escuchando.";
   $("#cue").classList.toggle("idle", !cue);
-  $("#cue-meta").textContent = `${a.mode} · confianza ${Math.round((a.confidence || 0) * 100)}%`;
+  $("#cue-meta").textContent = `${a.mode} · ${dur(a.totalMs)}`;
   const ul = $("#points"); ul.innerHTML = "";
   (a.points || []).forEach((p) => { const li = document.createElement("li"); li.textContent = p; ul.append(li); });
   if (a.code && a.code.body) { $("#codewrap").hidden = false; $("#code-lang").textContent = a.code.lang || "code"; $("#code").textContent = a.code.body; S.lastCode = a.code.body; }
   else $("#codewrap").hidden = true;
-  if (cue) speak(cue);
+  if (cue && !streamed) { speechSynthesis.cancel(); speak(cue); }   // a streamed cue already spoke, clause by clause
+  S.cue = null;
+}
+const dur = (v) => (v == null ? "—" : v >= 1000 ? (v / 1000).toFixed(1) + " s" : Math.round(v) + " ms");
+/** Pregunta → voz is the only latency the candidate feels; the four stages live in the tooltip. */
+function showLatency(ev) {
+  const p50 = ev.p50 || {}, p95 = ev.p95 || {};
+  if (p50.qToVoiceMs != null) $("#r-lat").textContent = (p50.qToVoiceMs / 1000).toFixed(1) + " s";
+  if (p50.firstTokenMs != null) $("#r-ft").textContent = dur(p50.firstTokenMs);
+  const row = (n, s) => `${n} · stt ${dur(s.sttMs)} · primer token ${dur(s.firstTokenMs)} · respuesta ${dur(s.totalMs)} · pregunta→voz ${dur(s.qToVoiceMs)}`;
+  const tip = `${row("p50", p50)}\n${row("p95", p95)}`;
+  $("#ro-lat").title = tip; $("#ro-ft").title = tip;
 }
 function showShot(url, t) { $("#monitor").hidden = false; $("#shot").src = url + "?t=" + t; $("#shot-meta").textContent = hhmmss(t); }
 
@@ -527,18 +616,27 @@ addEventListener("keydown", (e) => {
 
 /* ── voice ───────────────────────────────────────────────────────────── */
 const guessLang = (t) => (/[áéíóúñ¿¡]|\b(el|la|los|que|de|en|con|para|una|es|un|pero|porque)\b/i.test(t) ? "es-ES" : "en-US");
-function speakLocal(text) {
-  speechSynthesis.cancel();
+const voiceLang = (t) => ($("#s-lang").value === "auto" ? guessLang(t) : $("#s-lang").value);
+// No cancel() here: speechSynthesis queues, so clause after clause chains into one sentence.
+// Whoever starts a new cue cancels; see cueStart() and showAnswer().
+function speakLocal(text, lang) {
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = $("#s-lang").value === "auto" ? guessLang(text) : $("#s-lang").value;
+  u.lang = lang || voiceLang(text);
   const same = speechSynthesis.getVoices().filter((v) => v.lang.replace("_", "-").toLowerCase().startsWith(u.lang.slice(0, 2)));
   u.voice = same.find((v) => /Mónica|Monica|Paulina|Jorge|Samantha|Ava|Daniel/.test(v.name)) || same[0] || null;
   u.rate = 1.05; speechSynthesis.speak(u);
 }
-function speak(text) {
+function speak(text, lang) {
   if (!$("#t-voice").checked || !text) return;
-  if ($("#t-pulse").checked) { post("/tts", { text }).then((r) => { if (!r.ok) { notice("Pulse no respondió", "Uso la voz del navegador.", "warn"); speakLocal(text); } }); return; }
-  speakLocal(text);
+  if ($("#t-pulse").checked) {
+    // ponytail: chained so clauses reach Pulse in order; gapless playback would need a queue over there.
+    S.ttsChain = S.ttsChain
+      .then(() => post("/tts", { text }))
+      .then((r) => { if (!r.ok) { notice("Pulse no respondió", "Uso la voz del navegador.", "warn"); speakLocal(text, lang); } })
+      .catch(() => speakLocal(text, lang));
+    return;
+  }
+  speakLocal(text, lang);
 }
 
 /* ── floating window ─────────────────────────────────────────────────── */
