@@ -17,6 +17,7 @@ import type { ServerWebSocket, Subprocess } from "bun";
 import { Segmenter, wavFromPcm16, looksLikeQuestion, isHallucination, rmsOf, domainPrompt, type Segment } from "./audio";
 import { Brain, type Effort, type Mode, type Turn } from "./brain";
 import { handleVoiceRequest } from "./voice";
+import { startNative, stopNative, nativeStatus, listSources, type AppStatus } from "./native";
 
 const ROOT = dirname(import.meta.path);
 const PORT = Number(process.env.IAI_PORT ?? 31338);
@@ -232,13 +233,56 @@ function pruneShots(keep = 40) {
 
 const json = (data: unknown, init: ResponseInit = {}) => new Response(JSON.stringify(data), { ...init, headers: { "content-type": "application/json", ...(init.headers ?? {}) } });
 const jdText = () => { const p = join(USER_DIR, "jd.md"); return existsSync(p) ? readFileSync(p, "utf8").replace(/^# Job \/ meeting context\s*/, "").trim() : ""; };
-const state = () => ({ transcript: transcript.slice(-60), settings, latestShot, brain: brain.info(), inFlight, whisperPort: WHISPER_PORT, jd: jdText(), meters, discarded, latency: latency() });
+const state = () => ({ transcript: transcript.slice(-60), settings, latestShot, brain: brain.info(), inFlight, whisperPort: WHISPER_PORT, jd: jdText(), meters, discarded, latency: latency(), native: nativeStatus(), frontmostApp });
 setInterval(() => {
   if (!clients.size) return;
   broadcast({ type: "meters", meters, discarded });
   const l = latency();
   broadcast({ type: "latency", p50: l.p50, p95: l.p95 });
 }, 500);
+
+/** The one path from JPEG bytes to "this is the screen now" — used by the browser POST and by the
+ *  native helper, so the two capture routes cannot drift. */
+function saveShot(bytes: Uint8Array): string {
+  const path = join(SHOT_DIR, `shot-${Date.now()}.jpg`);
+  writeFileSync(path, bytes);
+  latestShot = { path, t: Date.now() }; shotDirty = true;
+  pruneShots();
+  broadcast({ type: "shot", path, url: `/shots/${path.split("/").pop()}`, bytes: bytes.length });
+  return path;
+}
+
+// ---------- native capture (Swift helper) ----------
+// Frames from ScreenCaptureKit land in exactly the same places as the browser's: the same
+// segmenters, the same meters, the same shot store. Everything downstream is unaware of which
+// route the audio came from, which is the point — one pipeline, two front doors.
+let frontmostApp: AppStatus | null = null;
+const nativeHandlers = {
+  onAudio: (ch: Ch, pcm: Int16Array) => {
+    const m = meters[ch];
+    if (!m.frames) { m.firstAt = Date.now(); log(`audio ${ch}: primera trama nativa (${pcm.length} muestras)`); }
+    m.frames++; m.bytes += pcm.byteLength; m.lastAt = Date.now();
+    const r = rmsOf(pcm);
+    m.rms = m.rms * 0.8 + r * 0.2;
+    m.peak = Math.max(m.peak * 0.95, r);
+    segmenters[ch].push(pcm);
+  },
+  onShot: (jpeg: Uint8Array) => { if (jpeg.length >= 1000) saveShot(jpeg); },
+  onStatus: (st: AppStatus) => {
+    // Which app the candidate is actually working in. The brain gets it as context, and it is the
+    // thing a shared browser tab could never tell us.
+    const changed = frontmostApp?.bundleId !== st.bundleId;
+    frontmostApp = st;
+    if (changed) { log(`app en primer plano: ${st.app}`); broadcast({ type: "app", ...st }); }
+  },
+  onLog: (line: string) => log(`[helper] ${line}`),
+  onExit: (code: number | null, tccDenied: boolean) => {
+    if (tccDenied) status("macOS denegó Grabación de pantalla o Micrófono al sidecar. Concédelo en Ajustes → Privacidad y seguridad y vuelve a arrancar.", "error");
+    else if (code) status(`La captura nativa terminó con código ${code}`, "error");
+    else status("Captura nativa detenida");
+    broadcast({ type: "native", ...nativeStatus() });
+  },
+};
 
 // ---------- HTTP + WS ----------
 const server = Bun.serve<WsData>({
@@ -260,6 +304,8 @@ const server = Bun.serve<WsData>({
       if (p === "/mock/say") return mockSay(url.searchParams.get("text") ?? "", url.searchParams.get("voice") ?? "Samantha");
       if (p === "/health") return json({ ok: true, whisper: await whisperHealthy(), ...state() });
       if (p === "/state") return json(state());
+      if (p === "/native/status") return json(nativeStatus());
+      if (p === "/native/sources") return json(await listSources());
       if (p.startsWith("/shots/")) { const f = join(SHOT_DIR, p.slice(7).replace(/[^\w.-]/g, "")); return existsSync(f) ? new Response(Bun.file(f)) : new Response("no", { status: 404 }); }
       return new Response("not found", { status: 404 });
     }
@@ -267,14 +313,20 @@ const server = Bun.serve<WsData>({
       if (p === "/shot") {
         const bytes = new Uint8Array(await req.arrayBuffer());
         if (bytes.length < 1000) return json({ ok: false, error: "empty" }, { status: 400 });
-        const path = join(SHOT_DIR, `shot-${Date.now()}.jpg`);
-        writeFileSync(path, bytes);
-        latestShot = { path, t: Date.now() }; shotDirty = true;
-        pruneShots();
-        broadcast({ type: "shot", path, url: `/shots/${path.split("/").pop()}`, bytes: bytes.length });
-        return json({ ok: true, path });
+        return json({ ok: true, path: saveShot(bytes) });
       }
       const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+      if (p === "/native/start") {
+        const r = startNative({
+          fps: typeof body.fps === "number" ? body.fps : 1,
+          display: typeof body.display === "number" ? body.display : undefined,
+          mic: body.mic !== false, audio: body.audio !== false, screen: body.screen !== false,
+        }, nativeHandlers);
+        if (r.ok) status("Captura nativa iniciada: audio del sistema, micro y pantalla, sin selector");
+        broadcast({ type: "native", ...nativeStatus() });
+        return json(r.ok ? { ok: true, ...nativeStatus() } : { ok: false, error: r.error }, { status: r.ok ? 200 : 409 });
+      }
+      if (p === "/native/stop") { stopNative(); broadcast({ type: "native", ...nativeStatus() }); return json({ ok: true }); }
       if (p === "/answer-now") {
         const mode: Mode = body.mode === "solve" ? "solve" : "answer";
         const effort: Effort = body.effort === "deep" ? "deep" : settings.effort;
@@ -358,6 +410,7 @@ ensureWhisper().then((ok) => {
 });
 
 // brain.kill() matters now that warm() holds a `claude` open: without it every restart orphans one.
-const shutdown = () => { for (const s of Object.values(segmenters)) s.flush(); brain.kill(); whisperProc?.kill(); process.exit(0); };
+const shutdown = () => {
+  stopNative(); for (const s of Object.values(segmenters)) s.flush(); brain.kill(); whisperProc?.kill(); process.exit(0); };
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

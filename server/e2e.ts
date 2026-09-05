@@ -463,7 +463,7 @@ async function testSolve(mock: CDP, panel: CDP, recorder: EventRecorder): Promis
     await evaluate(panel, `(() => { if (S.shotTimer) { clearInterval(S.shotTimer); S.shotTimer = null; } return true; })()`);
     await Bun.sleep(600);
     const jpg = await buildExerciseJpeg();
-    const put = await fetch(`${SIDECAR}/shot`, { method: "POST", headers: { "content-type": "image/jpeg" }, body: new Blob([jpg], { type: "image/jpeg" }) });
+    const put = await fetch(`${SIDECAR}/shot`, { method: "POST", headers: { "content-type": "image/jpeg" }, body: new Blob([jpg.buffer as ArrayBuffer], { type: "image/jpeg" }) });
     if (!put.ok) return { name: "solve_code", pass: false, detail: `POST /shot -> HTTP ${put.status}` };
 
     const tClick = Date.now();

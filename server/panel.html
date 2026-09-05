@@ -172,6 +172,7 @@ body.pip #cue{font-size:1.35rem}
     <div class="stat">micro apagado</div>
   </div>
 </section>
+<div id="appbar" class="lbl" style="padding:6px 20px;border-bottom:1px solid var(--rail);background:var(--desk)" hidden></div>
 
 <section class="ctx" id="ctx" hidden>
   <textarea id="jd" placeholder="Pega la oferta, el rol o el contexto de la reunión. Se combina con tu dossier en cada respuesta."></textarea>
@@ -212,6 +213,7 @@ body.pip #cue{font-size:1.35rem}
     <button id="b-tab" data-state="off" title="Para llamadas en el navegador: Meet, Teams web, Zoom web. Elige la PESTAÑA y marca «Compartir audio de la pestaña»."><span class="led"></span>Pestaña</button>
     <button id="b-screen" data-state="off" title="Para Zoom o Teams de escritorio. Elige «Pantalla completa» y marca «Compartir audio del sistema»."><span class="led"></span>Pantalla + sistema</button>
     <button id="b-mic" data-state="off" title="Tu voz entra como contexto para las siguientes respuestas."><span class="led"></span>Micro</button>
+    <button id="b-native" data-state="off" title="Captura nativa de macOS: audio del sistema, micro y pantalla completa, sin selector ni casillas. Cubre Zoom y Teams de escritorio y sabe en qué app estás."><span class="led"></span>Sistema</button>
   </div>
   <div class="divider"></div>
   <div class="group">
@@ -285,6 +287,8 @@ function handle(ev) {
       $("#jd").value = ev.jd || ""; brainInfo(ev.brain);
       if (ev.latestShot) showShot(`/shots/${ev.latestShot.path.split("/").pop()}`, ev.latestShot.t);
       setTally("idle", "en espera");
+      if (ev.native) paintNative(ev.native);
+      if (ev.frontmostApp) { $("#appbar").hidden = false; $("#appbar").textContent = `App en primer plano · ${ev.frontmostApp.app}`; }
       fetch("/health").then((r) => r.json()).then((h) => { $("#r-stt").textContent = h.whisper ? "whisper" : "sin whisper"; }).catch(() => {});
       break;
     case "meters": paintMeters(ev.meters); break;
@@ -302,6 +306,11 @@ function handle(ev) {
     case "discard": $("#status").textContent = `Audio descartado por muy corto o mudo: "${ev.text}"`; break;
     case "status": if (ev.level && ev.level !== "info") notice(ev.message, "", ev.level); else $("#status").textContent = ev.message; break;
     case "settings": $("#t-auto").checked = ev.auto; $("#t-deep").checked = ev.effort === "deep"; break;
+    case "native": paintNative(ev); break;
+    case "app":
+      $("#appbar").hidden = false;
+      $("#appbar").textContent = `App en primer plano · ${ev.app}${ev.title ? " — " + ev.title : ""}`;
+      break;
     case "reset": S.cue = null; speechSynthesis.cancel(); $("#turns").innerHTML = ""; emptyLog(); $("#t-count").textContent = ""; brainInfo(ev.brain); notice("Nueva ronda", "Sesión y transcripción reiniciadas."); break;
   }
 }
@@ -698,6 +707,29 @@ if (new URLSearchParams(location.search).get("test") === "1") {
     }
   };
 }
+
+/* ── native capture: no picker, no checkbox, and it sees every app ─────── */
+function paintNative(n) {
+  const b = $("#b-native");
+  b.dataset.state = n.running ? (n.counts && n.counts.audio > 0 ? "live" : "armed") : "off";
+  b.textContent = ""; b.append(Object.assign(document.createElement("span"), { className: "led" }),
+                              document.createTextNode(n.running ? "Sistema activo" : "Sistema"));
+  S.streams.them = n.running ? (S.streams.them || { getTracks: () => [] }) : S.streams.them;
+  S.streams.me = n.running ? (S.streams.me || { getTracks: () => [] }) : S.streams.me;
+  if (n.lastError) notice("Captura nativa", n.lastError, "error", { sticky: true, id: "native-err" });
+}
+$("#b-native").onclick = async () => {
+  const st = await fetch("/native/status").then((r) => r.json()).catch(() => null);
+  if (!st) return notice("Sin respuesta del sidecar", "No pude consultar el estado de la captura nativa.", "error");
+  if (!st.available) {
+    return notice("El helper nativo no está compilado", "Compílalo una vez y vuelve a intentarlo.", "warn",
+      { sticky: true, steps: ["Abre una terminal en la carpeta del plugin.", "cd helper && swift build -c release", "Vuelve a pulsar Sistema."] });
+  }
+  if (st.running) { await post("/native/stop", {}); return; }
+  const r = await post("/native/start", { fps: 1 });
+  if (!r.ok) notice("No se pudo iniciar la captura nativa", (await r.json().catch(() => ({}))).error || `HTTP ${r.status}`, "error", { sticky: true });
+  else notice("Captura nativa activa", "Audio del sistema y micro, sin selector. Cubre Zoom y Teams de escritorio.");
+};
 
 speechSynthesis.getVoices();
 connectEvents();

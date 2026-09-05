@@ -39,6 +39,11 @@ server.ts (:31338) ── segments on 0.8 s silence ──► whisper-server (:8
 - `server/audio.ts` — silence segmenter, WAV encoder, question detector, whisper-hallucination filter (unit tested: `bun test server/`).
 - `server/brain.ts` — `claude -p` wrapper following LifeOS `Inference.ts` (API-key env scrubbed so billing stays on the subscription; `--session-id`/`--resume` keeps one conversation per interview). `bun server/brain.ts --test "question"` for a standalone check.
 - `server/server.ts` — HTTP + WebSocket sidecar; `GET /health`, `POST /answer-now`, `POST /context`, `POST /reset`, `POST /tts`.
+- `server/native.ts` — runs `helper/iai-capture` and feeds its frames into the same segmenters,
+  meters and shot store the browser path uses, so nothing downstream knows which door the audio
+  came through. Endpoints: `GET /native/status`, `GET /native/sources`, `POST /native/start|stop`.
+  Build the helper once with `cd helper && swift build -c release`; macOS will ask for Screen
+  Recording and Microphone the first time.
 - `skills/live`, `skills/prep` — the two plugin commands.
 
 ## Tests
