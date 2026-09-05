@@ -473,18 +473,40 @@ async function pipePCM(ctx, stream, ch) {
   if (!tracks.length) return { ok: false, reason: "no-track" };
   try { await ctx.resume(); } catch {}
   if (ctx.state !== "running") return { ok: false, reason: "suspended" };
+  // ScriptProcessorNode ran the conversion on the main thread: during a capture the panel janked
+  // badly enough to stall DevTools calls past 15 s. An AudioWorklet does the same work on the
+  // audio thread, so the UI stays responsive while frames keep flowing.
+  if (!ctx.__iaiWorklet) {
+    const code = `
+      class Pcm extends AudioWorkletProcessor {
+        constructor() { super(); this.buf = new Float32Array(4096); this.n = 0; }
+        process(inputs) {
+          const ch = inputs[0] && inputs[0][0];
+          if (!ch) return true;
+          for (let i = 0; i < ch.length; i++) {
+            this.buf[this.n++] = ch[i];
+            if (this.n === this.buf.length) {
+              const out = new ArrayBuffer(2 + this.n * 2), dv = new DataView(out);
+              for (let k = 0; k < this.n; k++) { const v = Math.max(-1, Math.min(1, this.buf[k])); dv.setInt16(2 + k * 2, v < 0 ? v * 32768 : v * 32767, true); }
+              this.port.postMessage(out, [out]);
+              this.n = 0;
+            }
+          }
+          return true;
+        }
+      }
+      registerProcessor("iai-pcm", Pcm);`;
+    await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([code], { type: "text/javascript" })));
+    ctx.__iaiWorklet = true;
+  }
   const src = ctx.createMediaStreamSource(new MediaStream(tracks));
-  const proc = ctx.createScriptProcessor(4096, 1, 1);
-  const sink = ctx.createGain(); sink.gain.value = 0;      // must reach destination or no events fire
+  const proc = new AudioWorkletNode(ctx, "iai-pcm");
+  const sink = ctx.createGain(); sink.gain.value = 0;      // keep the graph reaching destination
   src.connect(proc); proc.connect(sink); sink.connect(ctx.destination);
-  proc.onaudioprocess = (e) => {
-    try {
-      const f = e.inputBuffer.getChannelData(0);
-      const buf = new ArrayBuffer(2 + f.length * 2), dv = new DataView(buf);
-      dv.setUint8(0, CH[ch]);
-      for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); dv.setInt16(2 + i * 2, v < 0 ? v * 32768 : v * 32767, true); }
-      sendFrame(buf);
-    } catch (err) { notice("Fallo procesando el audio", err.message, "error"); proc.onaudioprocess = null; }
+  proc.port.onmessage = (e) => {
+    const buf = e.data;                                    // [ch, 0, int16le…] — channel byte set here
+    new DataView(buf).setUint8(0, CH[ch]);
+    sendFrame(buf);
   };
   closePipe(ch);
   S.pipes[ch] = { ctx, proc, src, sink };
@@ -493,7 +515,7 @@ async function pipePCM(ctx, stream, ch) {
 }
 function closePipe(ch) {
   const p = S.pipes[ch]; if (!p) return;
-  try { p.proc.onaudioprocess = null; p.src.disconnect(); p.proc.disconnect(); p.sink.disconnect(); p.ctx.close(); } catch {}
+  try { p.proc.port && (p.proc.port.onmessage = null); p.src.disconnect(); p.proc.disconnect(); p.sink.disconnect(); p.ctx.close(); } catch {}
   delete S.pipes[ch];
 }
 function stopSource(ch) {

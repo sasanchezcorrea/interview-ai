@@ -41,6 +41,26 @@ server.ts (:31338) ── segments on 0.8 s silence ──► whisper-server (:8
 - `server/server.ts` — HTTP + WebSocket sidecar; `GET /health`, `POST /answer-now`, `POST /context`, `POST /reset`, `POST /tts`.
 - `skills/live`, `skills/prep` — the two plugin commands.
 
+## Tests
+
+```bash
+bun test server/            # unit: segmenter, WAV encoder, question detector, answer parser
+bun server/local-e2e.ts     # integration: the whole pipeline, no browser, ~2 min, 15 rows
+bun server/e2e.ts           # optional: the browser leg via real Chrome + CDP (flaky, see below)
+```
+
+`local-e2e.ts` is the one that runs every time. It streams real speech through the panel's OWN PCM
+encoder — lifted out of `panel.html` at runtime, not retyped — into the real `/audio` socket, then
+asserts against the server's `/events` stream: transcription, the trigger firing on a question,
+token streaming rebuilding the cue exactly, the latency budget, the candidate's channel, solve mode
+reading a screenshot, and the adversarial cases (five seconds of silence and four of pink noise must
+produce zero turns and zero model calls; solve with no screenshot must return 409).
+
+`e2e.ts` drives real Chrome to cover what only a browser can: `getDisplayMedia`, the capture button
+states, Picture-in-Picture. It is kept but not part of the routine loop — Chrome's
+`--auto-select-tab-capture-source-by-title` hands the panel its own tab regardless of the title
+asked for, so screenshot-dependent rows there test the harness more than the product.
+
 Env: `IAI_PORT` (31338), `IAI_WHISPER_PORT` (8178), `IAI_WHISPER_MODEL` (`~/.cache/whisper/ggml-small.bin`), `IAI_WHISPER_PROMPT` (domain vocabulary hint), `IAI_PULSE_URL`.
 
 ## Known limits (v1)

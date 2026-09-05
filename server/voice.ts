@@ -198,7 +198,7 @@ function ensureVoiceServer() {
       port: VOICE_PORT,
       hostname: "127.0.0.1",
       fetch(req, srv) {
-        if (new URL(req.url).pathname === "/voice/speak" && srv.upgrade(req)) return undefined;
+        if (new URL(req.url).pathname === "/voice/speak" && srv.upgrade(req, { data: {} })) return undefined;
         return new Response("voice relay", { status: 426 });
       },
       websocket: {

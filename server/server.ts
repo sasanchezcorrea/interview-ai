@@ -53,14 +53,14 @@ const discarded: Record<Ch, number> = { them: 0, me: 0 };
 /** Latency budget. qToVoiceMs is the only number that matches what the candidate feels: silence
  *  between the interviewer stopping and the first spoken word being on screen. The other three
  *  say which stage to blame for it. */
-type LatencyKey = "sttMs" | "firstTokenMs" | "totalMs" | "qToVoiceMs";
-const LATENCY_KEYS: LatencyKey[] = ["sttMs", "firstTokenMs", "totalMs", "qToVoiceMs"];
-const samples: Record<LatencyKey, number[]> = { sttMs: [], firstTokenMs: [], totalMs: [], qToVoiceMs: [] };
+type LatencyKey = "sttMs" | "firstTokenMs" | "totalMs" | "qToFirstWordMs" | "qToVoiceMs";
+const LATENCY_KEYS: LatencyKey[] = ["sttMs", "firstTokenMs", "totalMs", "qToFirstWordMs", "qToVoiceMs"];
+const samples: Record<LatencyKey, number[]> = { sttMs: [], firstTokenMs: [], totalMs: [], qToFirstWordMs: [], qToVoiceMs: [] };
 function sample(k: LatencyKey, ms: number) { const a = samples[k]; a.push(Math.round(ms)); if (a.length > 50) a.shift(); }
 const pct = (a: number[], p: number): number | null =>
   a.length ? [...a].sort((x, y) => x - y)[Math.min(a.length - 1, Math.ceil(p * a.length) - 1)]! : null;
 const pcts = (p: number) => Object.fromEntries(LATENCY_KEYS.map((k) => [k, pct(samples[k], p)])) as Record<LatencyKey, number | null>;
-const latency = () => ({ n: samples.qToVoiceMs.length, p50: pcts(0.5), p95: pcts(0.95) });
+const latency = () => ({ n: samples.qToFirstWordMs.length, p50: pcts(0.5), p95: pcts(0.95) });
 /** When the segmenter closed the turn's audio — the clock qToVoiceMs starts on. Weak so finished
  *  turns are collectable; a manual "answer now" with no new question simply finds nothing. */
 const segEndAt = new WeakMap<Turn, number>();
@@ -178,13 +178,21 @@ async function runBrain(mode: Mode, effort: Effort, reason: string) {
     const attachShot = !!latestShot && (mode === "solve" || shotDirty);
     if (!turns.length && !attachShot) { status("Nada nuevo que responder todavía"); return; }
     const lastQuestion = [...turns].reverse().find((t) => t.ch === "them");
-    const askedAt = (lastQuestion && segEndAt.get(lastQuestion)) ?? 0;
+    // The clock starts when the interviewer stopped talking — but only for the automatic path.
+    // A manual press can come minutes after that segment closed, and charging the wait to the
+    // system reported a 40-second latency for a 3-second answer.
+    const askedAt = reason === "auto" ? ((lastQuestion && segEndAt.get(lastQuestion)) ?? 0) : t0;
     broadcast({ type: "thinking", mode, effort, reason, turns: turns.length, shot: attachShot });
+    let firstWordSeen = false;
     const res = await brain.ask({ turns, mode, effort, imagePath: attachShot ? latestShot!.path : undefined }, {
-      onCueDelta: (chunk, cue) => broadcast({ type: "cue-delta", chunk, cue }),
+      onCueDelta: (chunk, cue) => {
+        // First word out is when the candidate can open their mouth; the rest streams behind them.
+        if (!firstWordSeen) { firstWordSeen = true; if (askedAt && mode === "answer") sample("qToFirstWordMs", Date.now() - askedAt); }
+        broadcast({ type: "cue-delta", chunk, cue });
+      },
       onCueDone: (cue) => {
         broadcast({ type: "cue-done", cue });
-        if (askedAt) sample("qToVoiceMs", Date.now() - askedAt);
+        if (askedAt && mode === "answer") sample("qToVoiceMs", Date.now() - askedAt);
       },
     });
     sentUpTo += turns.length;
