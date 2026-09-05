@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Mock interviewer · Interview AI</title>
+<style>
+  body{margin:0;background:#f6f7fb;color:#1b1f2a;font:16px/1.5 -apple-system,BlinkMacSystemFont,Inter,sans-serif;padding:24px;max-width:1000px}
+  h1{margin:0 0 6px}.hint{color:#5a6273;margin-bottom:18px}
+  .row{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  button{background:#fff;border:1px solid #cfd5e1;border-radius:8px;padding:9px 12px;cursor:pointer;font:inherit;text-align:left}
+  button:hover{border-color:#6b7cff}button.primary{background:#2f5bff;color:#fff;border-color:#2f5bff}
+  select{padding:8px;border-radius:8px;border:1px solid #cfd5e1;font:inherit}
+  #now{margin:14px 0;padding:14px 16px;background:#fff;border:1px solid #e1e5ee;border-radius:12px;font-size:20px;min-height:32px}
+  #problem{display:none;margin-top:18px;padding:22px;background:#fff;border:1px solid #e1e5ee;border-radius:12px;font-size:20px}
+  #problem pre{background:#0f1115;color:#e6e9ef;padding:14px;border-radius:10px;font:15px ui-monospace,Menlo,monospace}
+</style></head>
+<body>
+<h1>Mock interviewer</h1>
+<div class="hint">Página de prueba para Interview AI. Desde el panel pulsa <b>Capturar llamada</b>, elige <b>esta pestaña</b> y marca <b>Compartir audio de la pestaña</b>. Luego lanza una pregunta.</div>
+<div class="row">
+  <label>Voz: <select id="voice"><option>Samantha</option><option>Daniel</option><option>Mónica</option><option>Jorge</option><option>Paulina</option></select></label>
+  <button id="all" class="primary">▶ Secuencia completa (pausa 14 s)</button>
+  <button id="toggle-problem">🧩 Mostrar / ocultar ejercicio de código</button>
+</div>
+<div class="row" id="qs"></div>
+<div id="now">—</div>
+<audio id="a" controls style="width:100%"></audio>
+<section id="problem">
+  <h2 style="margin-top:0">Coding exercise</h2>
+  <p>Write a function <code>merge_intervals(intervals)</code> that takes a list of closed intervals <code>[start, end]</code> and returns the list with all overlapping intervals merged, sorted by start.</p>
+  <pre>Input:  [[1,3],[2,6],[8,10],[15,18]]
+Output: [[1,6],[8,10],[15,18]]
+
+Input:  [[1,4],[4,5]]
+Output: [[1,5]]</pre>
+  <p>Discuss time and space complexity. Python preferred.</p>
+</section>
+<script>
+const QS = [
+  ["en", "Hi, thanks for joining. To start, tell me about yourself and your experience building AI agents in production."],
+  ["en", "How would you design a multi-tenant RAG system where tenants must never see each other's data?"],
+  ["es", "Cuéntame de un proyecto difícil que hayas liderado y qué aprendiste de él."],
+  ["es", "¿Cómo garantizas que un agente con herramientas MCP no ejecute acciones destructivas por error?"],
+  ["en", "Great. Let's move to the coding exercise on screen. Please write a function that merges overlapping intervals and talk me through the complexity."],
+];
+const $ = (s) => document.querySelector(s);
+const voiceFor = (lang) => { const v = $("#voice").value; const es = /Mónica|Jorge|Paulina/.test(v); return lang === "es" ? (es ? v : "Mónica") : (es ? "Samantha" : v); };
+function play(lang, text) {
+  $("#now").textContent = text;
+  const a = $("#a"); a.src = `/mock/say?voice=${encodeURIComponent(voiceFor(lang))}&text=${encodeURIComponent(text)}`;
+  return new Promise((res) => { a.onended = res; a.onerror = res; a.play().catch(res); });
+}
+QS.forEach(([lang, q], i) => { const b = document.createElement("button"); b.textContent = `${i + 1}. [${lang}] ${q}`; b.onclick = () => { if (i === 4) $("#problem").style.display = "block"; play(lang, q); }; $("#qs").append(b); });
+$("#all").onclick = async () => { for (let i = 0; i < QS.length; i++) { if (i === 4) $("#problem").style.display = "block"; await play(...QS[i]); await new Promise((r) => setTimeout(r, 14000)); } };
+$("#toggle-problem").onclick = () => { const p = $("#problem"); p.style.display = p.style.display === "block" ? "none" : "block"; };
+</script>
+</body></html>

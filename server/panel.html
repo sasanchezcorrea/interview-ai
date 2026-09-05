@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Interview AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Interview AI — broadcast console.
+   Committed to a single dark world on purpose: this runs beside a live call, where a bright
+   panel glares and pulls the eye. Every colour is painted explicitly so nothing borrows a host
+   theme. Neutrals carry an olive/amber bias so they read as chosen equipment, not default grey. */
+:root{
+  --ground:#14120F; --desk:#1C1915; --deck:#242019; --rail:#332C22; --rail-hi:#463C2E;
+  --ink:#EFE9DC; --ink-2:#B8AE9C; --ink-3:#877E6F;
+  --tally:#E89A3C;                       /* live / thinking. Spent nowhere else. */
+  --them:#7BA9C4; --me:#93B583;          /* channel identities */
+  --ok:#7FA86B; --warn:#D0A03A; --bad:#C1553F;
+  --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px rgba(0,0,0,.35);
+  --step--1:.75rem; --step-0:.875rem; --step-1:1rem; --step-2:1.375rem; --step-3:2.25rem;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font:400 var(--step-0)/1.5 "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.mono{font-family:"IBM Plex Mono", ui-monospace, Menlo, monospace; font-variant-numeric:tabular-nums}
+.lbl{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:var(--step--1); letter-spacing:.11em; text-transform:uppercase; color:var(--ink-3)}
+
+/* ── masthead ───────────────────────────────────────────────────────── */
+header{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 20px; background:var(--desk); border-bottom:1px solid var(--rail)}
+.mark{display:flex; align-items:baseline; gap:10px}
+.mark b{font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:var(--step-1); letter-spacing:-.01em}
+.mark span{font-size:var(--step--1); color:var(--ink-3)}
+.tally{display:flex; align-items:center; gap:7px; padding:4px 11px; border-radius:2px; border:1px solid var(--rail-hi); background:var(--deck)}
+.tally i{width:7px; height:7px; border-radius:50%; background:var(--ink-3); display:block}
+.tally.live i{background:var(--tally); box-shadow:0 0 0 3px rgba(232,154,60,.18); animation:breathe 1.4s ease-in-out infinite}
+.tally.live{border-color:rgba(232,154,60,.45); color:var(--tally)}
+@keyframes breathe{50%{box-shadow:0 0 0 6px rgba(232,154,60,.05)}}
+@media (prefers-reduced-motion:reduce){.tally.live i{animation:none}}
+.readouts{display:flex; gap:22px; align-items:center}
+.readout{display:flex; flex-direction:column; gap:2px; align-items:flex-end; min-width:74px}
+.readout b{font-family:"IBM Plex Mono",monospace; font-weight:500; font-size:var(--step-0); font-variant-numeric:tabular-nums}
+
+/* ── channel strips: the honest answer to "¿me está oyendo?" ─────────── */
+.strips{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rail); border-bottom:1px solid var(--rail)}
+.strip{background:var(--desk); padding:9px 20px; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:14px}
+.strip .who{display:flex; align-items:center; gap:8px; min-width:132px}
+.dot{width:8px; height:8px; border-radius:50%; background:var(--ink-3); flex:none}
+.strip[data-state="live"] .dot{background:var(--ch)}
+.strip[data-state="armed"] .dot{background:var(--warn)}
+.strip[data-state="mute"] .dot{background:var(--bad)}
+.strip .name{font-family:"IBM Plex Mono",monospace; font-size:var(--step--1); letter-spacing:.09em; text-transform:uppercase; color:var(--ink-2)}
+.meter{height:9px; border-radius:1px; background:#0E0C0A; border:1px solid var(--rail); position:relative; overflow:hidden}
+.meter .fill{position:absolute; inset:0 auto 0 0; width:0; background:var(--ch); transition:width .09s linear}
+.meter .pk{position:absolute; top:0; bottom:0; width:2px; background:var(--ink); opacity:.55; transition:left .18s ease-out}
+.meter .ticks{position:absolute; inset:0; background:repeating-linear-gradient(90deg,transparent 0 calc(10% - 1px),rgba(255,255,255,.07) calc(10% - 1px) 10%)}
+.strip .stat{font-family:"IBM Plex Mono",monospace; font-size:var(--step--1); color:var(--ink-3); min-width:104px; text-align:right}
+.strip[data-state="mute"] .stat{color:var(--bad)}
+.strip[data-state="live"] .stat{color:var(--ink-2)}
+
+/* ── stage ──────────────────────────────────────────────────────────── */
+main{flex:1; display:grid; grid-template-columns:minmax(260px,30%) 1fr; min-height:0}
+.log{border-right:1px solid var(--rail); display:flex; flex-direction:column; min-height:0; background:var(--desk)}
+.log h2{margin:0; padding:11px 18px 9px; border-bottom:1px solid var(--rail); display:flex; justify-content:space-between; align-items:baseline}
+#turns{flex:1; overflow-y:auto; padding:14px 18px; display:flex; flex-direction:column; gap:14px; scrollbar-width:thin}
+.turn{display:grid; grid-template-columns:auto 1fr; gap:11px}
+.turn .tick{width:2px; border-radius:1px; background:var(--rail-hi)}
+.turn.them .tick{background:var(--them)} .turn.me .tick{background:var(--me)}
+.turn .head{display:flex; gap:9px; align-items:baseline; margin-bottom:2px}
+.turn .head b{font-family:"IBM Plex Mono",monospace; font-size:var(--step--1); letter-spacing:.08em; text-transform:uppercase; font-weight:500}
+.turn.them .head b{color:var(--them)} .turn.me .head b{color:var(--me)}
+.turn .head time{font-family:"IBM Plex Mono",monospace; font-size:var(--step--1); color:var(--ink-3)}
+.turn p{margin:0; color:var(--ink-2); font-size:var(--step-0)}
+.turn.ask p{color:var(--ink)}
+.log .empty{color:var(--ink-3); font-size:var(--step-0); padding:6px 0}
+
+.stage{display:flex; flex-direction:column; min-height:0; overflow-y:auto; padding:26px 30px 30px; gap:22px}
+.cue{border-top:2px solid var(--rail-hi); padding-top:14px; transition:border-color .2s}
+.cue.thinking{border-top-color:var(--tally)}
+.cue .meta{display:flex; justify-content:space-between; align-items:baseline; gap:14px; margin-bottom:10px}
+#cue{
+  font-family:"Fraunces",Georgia,serif; font-optical-sizing:auto; font-weight:600;
+  font-size:clamp(1.5rem,2.7vw,var(--step-3)); line-height:1.22; letter-spacing:-.015em;
+  text-wrap:balance; margin:0; max-width:34ch;
+}
+#cue.idle{font-family:"IBM Plex Sans",sans-serif; font-weight:400; font-size:var(--step-1); line-height:1.6; color:var(--ink-3); max-width:52ch; letter-spacing:0}
+#points{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:9px; max-width:62ch}
+#points li{position:relative; padding-left:17px; color:var(--ink-2)}
+#points li::before{content:""; position:absolute; left:0; top:.62em; width:6px; height:1px; background:var(--rail-hi)}
+
+.slab{border:1px solid var(--rail); border-radius:3px; background:var(--desk); overflow:hidden}
+.slab>header{background:var(--deck); padding:7px 13px; border-bottom:1px solid var(--rail); display:flex; justify-content:space-between; align-items:center; gap:12px}
+.slab pre{margin:0; padding:15px; overflow:auto; max-height:44vh; background:#100E0B; font-family:"IBM Plex Mono",monospace; font-size:var(--step--1); line-height:1.62; color:var(--ink)}
+#monitor{max-width:300px}
+#monitor img{display:block; width:100%; border:1px solid var(--rail); border-radius:2px; opacity:.82; transition:opacity .15s}
+#monitor:hover img{opacity:1}
+
+/* ── console ────────────────────────────────────────────────────────── */
+.console{display:flex; flex-wrap:wrap; align-items:center; gap:9px; padding:11px 20px; background:var(--desk); border-top:1px solid var(--rail); box-shadow:var(--shadow)}
+.group{display:flex; align-items:center; gap:7px}
+.divider{width:1px; align-self:stretch; background:var(--rail); margin:0 5px}
+button{
+  font:500 var(--step--1)/1 "IBM Plex Sans",sans-serif; letter-spacing:.02em;
+  color:var(--ink-2); background:var(--deck); border:1px solid var(--rail-hi); border-radius:2px;
+  padding:9px 13px; cursor:pointer; display:inline-flex; align-items:center; gap:7px;
+  transition:border-color .14s, color .14s, background .14s;
+}
+button:hover{border-color:var(--ink-3); color:var(--ink)}
+button:focus-visible{outline:2px solid var(--tally); outline-offset:2px}
+button .led{width:6px; height:6px; border-radius:50%; background:var(--ink-3); flex:none}
+button[data-state="armed"]{border-color:var(--warn); color:var(--warn)} button[data-state="armed"] .led{background:var(--warn)}
+button[data-state="live"]{border-color:var(--ok); color:var(--ok)} button[data-state="live"] .led{background:var(--ok)}
+button.primary{background:#3A2E1B; border-color:#6B5326; color:#F2C88B}
+button.primary:hover{border-color:var(--tally); color:#FFDCA8}
+button.quiet{background:transparent; border-color:transparent; color:var(--ink-3)}
+button.quiet:hover{color:var(--ink-2); border-color:var(--rail)}
+kbd{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--ink-3); border:1px solid var(--rail); border-radius:2px; padding:1px 4px}
+.switch{display:inline-flex; align-items:center; gap:6px; font-size:var(--step--1); color:var(--ink-2); cursor:pointer; user-select:none}
+.switch input{accent-color:var(--tally); margin:0}
+select{font:400 var(--step--1) "IBM Plex Sans",sans-serif; color:var(--ink-2); background:var(--deck); border:1px solid var(--rail-hi); border-radius:2px; padding:8px 9px}
+
+/* ── notices ────────────────────────────────────────────────────────── */
+#notices{position:absolute; right:22px; bottom:74px; display:flex; flex-direction:column; gap:9px; max-width:430px; z-index:20}
+.notice{background:var(--deck); border:1px solid var(--rail-hi); border-left:3px solid var(--ink-3); border-radius:3px; padding:12px 14px; box-shadow:var(--shadow); font-size:var(--step-0); color:var(--ink-2)}
+.notice.warn{border-left-color:var(--warn)} .notice.error{border-left-color:var(--bad)}
+.notice b{display:block; color:var(--ink); font-weight:600; margin-bottom:3px; font-size:var(--step-0)}
+.notice ol{margin:7px 0 0; padding-left:17px; display:flex; flex-direction:column; gap:4px}
+.notice button{margin-top:9px; padding:6px 10px}
+footer{display:flex; justify-content:space-between; gap:16px; padding:6px 20px; background:var(--ground); border-top:1px solid var(--rail); color:var(--ink-3); font-size:var(--step--1)}
+.ctx{display:grid; grid-template-columns:1fr auto; gap:11px; padding:13px 20px; background:var(--deck); border-bottom:1px solid var(--rail)}
+.ctx textarea{min-height:92px; resize:vertical; background:#100E0B; color:var(--ink); border:1px solid var(--rail-hi); border-radius:2px; padding:10px; font:400 var(--step-0)/1.55 "IBM Plex Sans",sans-serif}
+.ctx textarea:focus-visible{outline:2px solid var(--tally); outline-offset:1px}
+[hidden]{display:none !important}
+body.pip{overflow:auto} body.pip main{grid-template-columns:1fr} body.pip .log{display:none} body.pip .stage{padding:14px}
+body.pip #cue{font-size:1.35rem}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="mark">
+    <b>Interview AI</b>
+    <span>lo que ves aquí lo dices y lo escribes tú</span>
+  </div>
+  <div class="readouts">
+    <div class="tally" id="tally"><i></i><span class="lbl" id="tally-text" style="color:inherit">en espera</span></div>
+    <div class="readout"><span class="lbl">transcripción</span><b id="r-stt">—</b></div>
+    <div class="readout"><span class="lbl">modelo</span><b id="r-model">—</b></div>
+    <div class="readout"><span class="lbl">latencia</span><b id="r-lat">—</b></div>
+  </div>
+</header>
+
+<section class="strips">
+  <div class="strip" id="strip-them" data-state="off" style="--ch:var(--them)">
+    <div class="who"><span class="dot"></span><span class="name">Entrevistador</span></div>
+    <div class="meter"><div class="fill"></div><div class="pk"></div><div class="ticks"></div></div>
+    <div class="stat">sin captura</div>
+  </div>
+  <div class="strip" id="strip-me" data-state="off" style="--ch:var(--me)">
+    <div class="who"><span class="dot"></span><span class="name">Tú</span></div>
+    <div class="meter"><div class="fill"></div><div class="pk"></div><div class="ticks"></div></div>
+    <div class="stat">micro apagado</div>
+  </div>
+</section>
+
+<section class="ctx" id="ctx" hidden>
+  <textarea id="jd" placeholder="Pega la oferta, el rol o el contexto de la reunión. Se combina con tu dossier en cada respuesta."></textarea>
+  <div style="display:flex; flex-direction:column; gap:7px; align-items:flex-start">
+    <button class="primary" id="b-savectx">Guardar y reiniciar sesión</button>
+    <span class="lbl" id="ctx-info"></span>
+  </div>
+</section>
+
+<main>
+  <section class="log">
+    <h2><span class="lbl">Transcripción</span><span class="lbl mono" id="t-count"></span></h2>
+    <div id="turns"><p class="empty">Aún no ha entrado audio. Elige una fuente abajo.</p></div>
+  </section>
+
+  <section class="stage">
+    <div class="cue" id="cuecard">
+      <div class="meta"><span class="lbl">Di ahora</span><span class="lbl mono" id="cue-meta"></span></div>
+      <p id="cue" class="idle">Elige una fuente de audio abajo. Cuando el entrevistador pregunte, aquí aparece la frase con la que abrir, y la lees tú.</p>
+    </div>
+    <ul id="points"></ul>
+    <div class="slab" id="codewrap" hidden>
+      <header><span class="lbl mono" id="code-lang">code</span><button id="b-copy">Copiar</button></header>
+      <pre><code id="code"></code></pre>
+    </div>
+    <div id="monitor" hidden>
+      <div class="meta" style="display:flex; justify-content:space-between; margin-bottom:7px"><span class="lbl">Pantalla compartida</span><span class="lbl mono" id="shot-meta"></span></div>
+      <img id="shot" alt="Última captura de la pantalla compartida">
+    </div>
+  </section>
+</main>
+
+<div id="notices"></div>
+
+<section class="console">
+  <div class="group">
+    <span class="lbl" style="margin-right:3px">Fuente</span>
+    <button id="b-tab" data-state="off" title="Para llamadas en el navegador: Meet, Teams web, Zoom web. Elige la PESTAÑA y marca «Compartir audio de la pestaña»."><span class="led"></span>Pestaña</button>
+    <button id="b-screen" data-state="off" title="Para Zoom o Teams de escritorio. Elige «Pantalla completa» y marca «Compartir audio del sistema»."><span class="led"></span>Pantalla + sistema</button>
+    <button id="b-mic" data-state="off" title="Tu voz entra como contexto para las siguientes respuestas."><span class="led"></span>Micro</button>
+  </div>
+  <div class="divider"></div>
+  <div class="group">
+    <button class="primary" id="b-answer">Responder ahora <kbd>⌥↵</kbd></button>
+    <button id="b-solve">Resolver lo que se ve <kbd>⌥S</kbd></button>
+    <label class="switch"><input type="checkbox" id="t-deep"> Deep</label>
+    <label class="switch"><input type="checkbox" id="t-auto" checked> Auto</label>
+  </div>
+  <div class="divider"></div>
+  <div class="group">
+    <label class="switch"><input type="checkbox" id="t-voice" checked> Voz</label>
+    <select id="s-lang" aria-label="Idioma de la voz"><option value="auto">auto</option><option value="es-ES">es</option><option value="en-US">en</option></select>
+    <label class="switch" title="Usa ElevenLabs vía Pulse en vez de la voz del navegador"><input type="checkbox" id="t-pulse"> Pulse</label>
+  </div>
+  <div class="divider"></div>
+  <div class="group">
+    <button class="quiet" id="b-float">Flotar</button>
+    <button class="quiet" id="b-ctx">Contexto</button>
+    <button class="quiet" id="b-reset">Nueva ronda</button>
+    <button class="quiet" id="b-test" hidden>Autotest</button>
+  </div>
+</section>
+
+<footer><span id="status">Listo.</span><span id="brain-info" class="mono"></span></footer>
+<video id="vid-tab" muted playsinline hidden></video><video id="vid-screen" muted playsinline hidden></video>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const S = { pipes: {}, streams: {}, audioWs: null, queue: [], shotTimer: null, lastThumb: null,
+            pip: null, lastCode: "", meterPrev: {}, noAudioSince: {}, shotWarned: false };
+const CH = { them: 0, me: 1 };
+
+/* ── notices: nothing fails silently ─────────────────────────────────── */
+function notice(title, body, level = "info", { sticky = false, id = null, steps = null, action = null } = {}) {
+  if (id && document.getElementById(id)) return;
+  const n = document.createElement("div");
+  n.className = "notice " + level; if (id) n.id = id;
+  n.innerHTML = `<b></b><span></span>${steps ? "<ol>" + steps.map(() => "<li></li>").join("") + "</ol>" : ""}`;
+  n.querySelector("b").textContent = title;
+  n.querySelector("span").textContent = body;
+  if (steps) n.querySelectorAll("li").forEach((li, i) => (li.textContent = steps[i]));
+  if (action) { const b = document.createElement("button"); b.textContent = action.label; b.onclick = () => { n.remove(); action.run(); }; n.append(b); }
+  const close = document.createElement("button"); close.textContent = sticky ? "Entendido" : "Cerrar";
+  close.style.marginLeft = action ? "7px" : "0"; close.onclick = () => n.remove(); n.append(close);
+  $("#notices").append(n);
+  if (!sticky) setTimeout(() => n.remove(), 7000);
+  $("#status").textContent = title;
+}
+const post = (p, b) => fetch(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b || {}) });
+const hhmmss = (t) => new Date(t).toLocaleTimeString("es-ES", { hour12: false });
+
+/* ── events channel ──────────────────────────────────────────────────── */
+function connectEvents() {
+  const ws = new WebSocket(`ws://${location.host}/events`);
+  ws.onopen = () => { $("#status").textContent = "Conectado al sidecar."; };
+  ws.onclose = () => { setTally("off", "sin servidor"); setTimeout(connectEvents, 1500); };
+  ws.onmessage = (m) => handle(JSON.parse(m.data));
+}
+function setTally(state, text) {
+  $("#tally").classList.toggle("live", state === "live");
+  $("#tally-text").textContent = text;
+}
+function handle(ev) {
+  switch (ev.type) {
+    case "state":
+      $("#turns").innerHTML = ""; (ev.transcript || []).forEach(addTurn); if (!(ev.transcript || []).length) emptyLog();
+      $("#t-auto").checked = ev.settings.auto; $("#t-deep").checked = ev.settings.effort === "deep";
+      $("#jd").value = ev.jd || ""; brainInfo(ev.brain);
+      if (ev.latestShot) showShot(`/shots/${ev.latestShot.path.split("/").pop()}`, ev.latestShot.t);
+      setTally("idle", "en espera");
+      fetch("/health").then((r) => r.json()).then((h) => { $("#r-stt").textContent = h.whisper ? "whisper" : "sin whisper"; }).catch(() => {});
+      break;
+    case "meters": paintMeters(ev.meters); break;
+    case "transcript": addTurn(ev); $("#r-stt").textContent = ev.sttMs + " ms"; break;
+    case "thinking":
+      $("#cuecard").classList.add("thinking"); setTally("live", ev.effort === "deep" ? "opus" : "sonnet");
+      $("#cue-meta").textContent = `${ev.mode}${ev.shot ? " + pantalla" : ""} · ${ev.turns} turnos`;
+      break;
+    case "answer": showAnswer(ev); break;
+    case "shot": showShot(ev.url, Date.now()); break;
+    case "discard": $("#status").textContent = `Audio descartado por muy corto o mudo: "${ev.text}"`; break;
+    case "status": if (ev.level && ev.level !== "info") notice(ev.message, "", ev.level); else $("#status").textContent = ev.message; break;
+    case "settings": $("#t-auto").checked = ev.auto; $("#t-deep").checked = ev.effort === "deep"; break;
+    case "reset": $("#turns").innerHTML = ""; emptyLog(); $("#t-count").textContent = ""; brainInfo(ev.brain); notice("Nueva ronda", "Sesión y transcripción reiniciadas."); break;
+  }
+}
+function emptyLog() { $("#turns").innerHTML = '<p class="empty">Aún no ha entrado audio. Elige una fuente abajo.</p>'; }
+function brainInfo(b) {
+  if (!b) return;
+  $("#brain-info").textContent = `dossier ${b.dossier ? "✓" : "✗"} · contexto ${b.jd ? "✓" : "✗"} · ${b.models.quick} / ${b.models.deep}`;
+  $("#ctx-info").textContent = b.dossier ? "Dossier cargado" : "Sin dossier: ejecuta /interview-ai:prep";
+}
+
+/* ── channel strips: level, state, and the truth about audio ─────────── */
+function paintMeters(m) {
+  for (const ch of ["them", "me"]) {
+    const strip = $("#strip-" + ch), st = strip.querySelector(".stat");
+    const cur = m[ch], prev = S.meterPrev[ch];
+    const fps = prev ? Math.round((cur.frames - prev.frames) * 2) : 0;
+    S.meterPrev[ch] = { frames: cur.frames };
+    const armed = !!S.streams[ch];
+    if (!armed) { strip.dataset.state = "off"; st.textContent = ch === "them" ? "sin captura" : "micro apagado"; setLevel(strip, 0, 0); continue; }
+    const fresh = Date.now() - cur.lastAt < 1500;
+    if (!fresh) { strip.dataset.state = "armed"; st.textContent = "sin tramas"; setLevel(strip, 0, 0); continue; }
+    // Frames arriving but flat: a real, common failure (surface shared without its audio).
+    const silent = cur.peak < 0.004;
+    strip.dataset.state = silent ? "mute" : "live";
+    st.textContent = silent ? "muda" : `${fps}/s · ${(20 * Math.log10(Math.max(cur.rms, 1e-4))).toFixed(0)} dB`;
+    setLevel(strip, cur.rms, cur.peak);
+    if (silent) { S.noAudioSince[ch] = S.noAudioSince[ch] || Date.now(); if (Date.now() - S.noAudioSince[ch] > 8000) warnSilent(ch); }
+    else S.noAudioSince[ch] = 0;
+  }
+}
+function setLevel(strip, rms, peak) {
+  const scale = (v) => Math.max(0, Math.min(1, (20 * Math.log10(Math.max(v, 1e-4)) + 60) / 60));
+  strip.querySelector(".fill").style.width = (scale(rms) * 100).toFixed(1) + "%";
+  strip.querySelector(".pk").style.left = (scale(peak) * 100).toFixed(1) + "%";
+}
+function warnSilent(ch) {
+  notice("Llega audio, pero está mudo",
+    ch === "them" ? "La fuente entrega una pista de audio con todo a cero. Casi siempre es la casilla de audio sin marcar." : "El micro entrega silencio: revisa el dispositivo de entrada del sistema.",
+    "warn", { sticky: true, id: "silent-" + ch, steps: ch === "them" ? ["Detén la captura y vuelve a elegir la fuente.", "Marca «Compartir audio de la pestaña» o «del sistema» antes de aceptar."] : null });
+}
+
+/* ── transcript ──────────────────────────────────────────────────────── */
+function addTurn(t) {
+  const box = $("#turns"); box.querySelector(".empty")?.remove();
+  const d = document.createElement("article");
+  d.className = "turn " + t.ch + (t.ch === "them" && /[?¿]/.test(t.text) ? " ask" : "");
+  d.innerHTML = '<div class="tick"></div><div><div class="head"><b></b><time></time></div><p></p></div>';
+  d.querySelector("b").textContent = t.ch === "them" ? "Entrevistador" : "Tú";
+  d.querySelector("time").textContent = hhmmss(t.t);
+  d.querySelector("p").textContent = t.text;
+  box.append(d); box.scrollTop = box.scrollHeight;
+  $("#t-count").textContent = box.querySelectorAll(".turn").length;
+}
+function showAnswer(a) {
+  $("#cuecard").classList.remove("thinking"); setTally("idle", "en espera");
+  $("#r-model").textContent = (a.model || "").replace("claude-", "");
+  $("#r-lat").textContent = (a.ms / 1000).toFixed(1) + " s";
+  const cue = (a.cue || "").trim();
+  $("#cue").textContent = cue || "Ese turno no pedía respuesta. Sigue escuchando.";
+  $("#cue").classList.toggle("idle", !cue);
+  $("#cue-meta").textContent = `${a.mode} · confianza ${Math.round((a.confidence || 0) * 100)}%`;
+  const ul = $("#points"); ul.innerHTML = "";
+  (a.points || []).forEach((p) => { const li = document.createElement("li"); li.textContent = p; ul.append(li); });
+  if (a.code && a.code.body) { $("#codewrap").hidden = false; $("#code-lang").textContent = a.code.lang || "code"; $("#code").textContent = a.code.body; S.lastCode = a.code.body; }
+  else $("#codewrap").hidden = true;
+  if (cue) speak(cue);
+}
+function showShot(url, t) { $("#monitor").hidden = false; $("#shot").src = url + "?t=" + t; $("#shot-meta").textContent = hhmmss(t); }
+
+/* ── audio transport ─────────────────────────────────────────────────── */
+// Opened before any capture so the first words are never lost to a CONNECTING socket.
+function openAudioWs() {
+  if (S.audioWs && S.audioWs.readyState <= 1) return S.audioWs;
+  const ws = new WebSocket(`ws://${location.host}/audio`);
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => { S.queue.splice(0).forEach((b) => ws.send(b)); };
+  ws.onclose = () => { S.audioWs = null; if (Object.keys(S.streams).length) setTimeout(openAudioWs, 800); };
+  ws.onerror = () => notice("Se cortó el canal de audio", "Reintentando la conexión con el sidecar.", "warn");
+  S.audioWs = ws; return ws;
+}
+function sendFrame(buf) {
+  const ws = openAudioWs();
+  if (ws.readyState === 1) ws.send(buf);
+  else if (S.queue.length < 120) S.queue.push(buf);   // ~30 s of backlog, then drop oldest
+  else { S.queue.shift(); S.queue.push(buf); }
+}
+/** Wire a stream's audio into the PCM transport. `ctx` is created by the caller inside the
+ *  click, before any await: an AudioContext born outside a user gesture starts suspended and
+ *  then never fires onaudioprocess — silence with no error anywhere. */
+async function pipePCM(ctx, stream, ch) {
+  const tracks = stream.getAudioTracks();
+  if (!tracks.length) return { ok: false, reason: "no-track" };
+  try { await ctx.resume(); } catch {}
+  if (ctx.state !== "running") return { ok: false, reason: "suspended" };
+  const src = ctx.createMediaStreamSource(new MediaStream(tracks));
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const sink = ctx.createGain(); sink.gain.value = 0;      // must reach destination or no events fire
+  src.connect(proc); proc.connect(sink); sink.connect(ctx.destination);
+  proc.onaudioprocess = (e) => {
+    try {
+      const f = e.inputBuffer.getChannelData(0);
+      const buf = new ArrayBuffer(2 + f.length * 2), dv = new DataView(buf);
+      dv.setUint8(0, CH[ch]);
+      for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); dv.setInt16(2 + i * 2, v < 0 ? v * 32768 : v * 32767, true); }
+      sendFrame(buf);
+    } catch (err) { notice("Fallo procesando el audio", err.message, "error"); proc.onaudioprocess = null; }
+  };
+  closePipe(ch);
+  S.pipes[ch] = { ctx, proc, src, sink };
+  tracks[0].addEventListener("ended", () => stopSource(ch));
+  return { ok: true };
+}
+function closePipe(ch) {
+  const p = S.pipes[ch]; if (!p) return;
+  try { p.proc.onaudioprocess = null; p.src.disconnect(); p.proc.disconnect(); p.sink.disconnect(); p.ctx.close(); } catch {}
+  delete S.pipes[ch];
+}
+function stopSource(ch) {
+  closePipe(ch);
+  S.streams[ch]?.getTracks().forEach((t) => t.stop());
+  delete S.streams[ch]; delete S.noAudioSince[ch];
+  if (ch === "them") { setSourceState("b-tab", "off"); setSourceState("b-screen", "off"); }
+  else setSourceState("b-mic", "off");
+}
+function setSourceState(id, state) { $("#" + id).dataset.state = state; }
+
+/* ── capture ─────────────────────────────────────────────────────────── */
+async function capture(kind) {
+  const btn = kind === "tab" ? "b-tab" : "b-screen";
+  if (S.streams.them) { stopSource("them"); return; }
+  openAudioWs();
+  // Created synchronously, inside the gesture, before the picker await.
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 5, max: 10 }, ...(kind === "tab" ? { displaySurface: "browser" } : { displaySurface: "monitor" }) },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      systemAudio: kind === "screen" ? "include" : "exclude",
+      selfBrowserSurface: "exclude", surfaceSwitching: "include",
+      monitorTypeSurfaces: kind === "tab" ? "exclude" : "include",
+    });
+  } catch (e) {
+    ctx.close();
+    if (e.name === "NotAllowedError") notice("Captura cancelada", "No se eligió ninguna fuente.", "warn");
+    else notice("No se pudo iniciar la captura", `${e.name}: ${e.message}`, "error");
+    return;
+  }
+  S.streams.them = stream;
+  $("#vid-" + kind).srcObject = stream; $("#vid-" + kind).play().catch(() => {});
+  const surface = stream.getVideoTracks()[0].getSettings().displaySurface || "desconocida";
+  const res = await pipePCM(ctx, stream, "them");
+  if (!res.ok) {
+    setSourceState(btn, "armed");
+    ctx.close();
+    if (res.reason === "suspended") notice("El motor de audio no arrancó", "El navegador dejó el contexto de audio suspendido. Vuelve a pulsar la fuente.", "error", { sticky: true });
+    else noAudioCard(kind, surface);
+  } else {
+    setSourceState(btn, "live");
+    notice("Fuente capturada", `Superficie: ${surface}. Vigila el vúmetro del entrevistador.`);
+  }
+  ensureShotTimer(); setTimeout(() => takeShot(true), 700);
+  stream.getVideoTracks()[0].addEventListener("ended", () => { stopSource("them"); notice("Captura detenida", "Se dejó de compartir la fuente.", "warn"); });
+}
+function noAudioCard(kind, surface) {
+  notice("Esa captura no trae audio",
+    `Compartiste «${surface}» sin pista de audio, así que no habrá transcripción. El vídeo sí funciona.`,
+    "error", { sticky: true, id: "no-audio",
+      steps: kind === "tab"
+        ? ["Vuelve a pulsar Pestaña.", "Elige la pestaña de la llamada en la sección «Pestaña de Chrome».", "Marca «Compartir audio de la pestaña» antes de aceptar."]
+        : ["Vuelve a pulsar Pantalla + sistema.", "Elige «Pantalla completa».", "Marca «Compartir audio del sistema» antes de aceptar."],
+      action: { label: "Reintentar", run: () => capture(kind) } });
+}
+$("#b-tab").onclick = () => capture("tab");
+$("#b-screen").onclick = () => capture("screen");
+$("#b-mic").onclick = async () => {
+  if (S.streams.me) { stopSource("me"); return; }
+  openAudioWs();
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
+  catch (e) { ctx.close(); return notice("Micro no disponible", `${e.name}: ${e.message}`, "error"); }
+  S.streams.me = stream;
+  const res = await pipePCM(ctx, stream, "me");
+  setSourceState("b-mic", res.ok ? "live" : "armed");
+  if (!res.ok) { ctx.close(); notice("El micro no entrega audio", res.reason === "suspended" ? "El contexto de audio quedó suspendido." : "El dispositivo no expone ninguna pista.", "error", { sticky: true }); }
+};
+
+/* ── screen frames ───────────────────────────────────────────────────── */
+function shotSource() { for (const id of ["vid-screen", "vid-tab"]) { const v = $("#" + id); if (v.srcObject && v.videoWidth) return v; } return null; }
+async function takeShot(force = false) {
+  const v = shotSource(); if (!v) return;
+  const t = S.thumb || (S.thumb = document.createElement("canvas")); t.width = 32; t.height = 18;
+  const tc = t.getContext("2d", { willReadFrequently: true }); tc.drawImage(v, 0, 0, 32, 18);
+  const d = tc.getImageData(0, 0, 32, 18).data;
+  let diff = 1;
+  if (S.lastThumb) { diff = 0; for (let i = 0; i < d.length; i += 4) diff += Math.abs(d[i] - S.lastThumb[i]) + Math.abs(d[i + 1] - S.lastThumb[i + 1]) + Math.abs(d[i + 2] - S.lastThumb[i + 2]); diff /= (d.length / 4) * 3 * 255; }
+  if (!force && diff < 0.02) return;
+  S.lastThumb = new Uint8ClampedArray(d);
+  const c = S.canvas || (S.canvas = document.createElement("canvas"));
+  const scale = Math.min(1, 1440 / v.videoWidth); c.width = Math.round(v.videoWidth * scale); c.height = Math.round(v.videoHeight * scale);
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.6));
+  try {
+    const r = await fetch("/shot", { method: "POST", headers: { "content-type": "image/jpeg" }, body: blob });
+    if (!r.ok && !S.shotWarned) { S.shotWarned = true; notice("El servidor rechazó la captura", `HTTP ${r.status}`, "warn"); }
+  } catch (e) { if (!S.shotWarned) { S.shotWarned = true; notice("No se pudo enviar la captura", e.message, "warn"); } }
+}
+function ensureShotTimer() { if (!S.shotTimer) S.shotTimer = setInterval(takeShot, 4000); }
+
+/* ── actions ─────────────────────────────────────────────────────────── */
+const effort = () => ($("#t-deep").checked ? "deep" : "quick");
+async function answerNow(mode) {
+  try {
+    if (mode === "solve") await takeShot(true);
+    const r = await post("/answer-now", { mode, effort: effort() });
+    if (!r.ok) notice("No se pidió la respuesta", (await r.json().catch(() => ({}))).error || `HTTP ${r.status}`, "warn");
+  } catch (e) { notice("El sidecar no responde", `${e.message}. Comprueba que sigue vivo.`, "error"); }
+}
+$("#b-answer").onclick = () => answerNow("answer");
+$("#b-solve").onclick = () => answerNow("solve");
+$("#t-deep").onchange = () => post("/settings", { effort: effort() });
+$("#t-auto").onchange = () => post("/settings", { auto: $("#t-auto").checked });
+$("#b-reset").onclick = () => post("/reset");
+$("#b-ctx").onclick = () => ($("#ctx").hidden = !$("#ctx").hidden);
+$("#b-savectx").onclick = async () => { await post("/context", { jd: $("#jd").value }); $("#ctx").hidden = true; notice("Contexto guardado", "El cerebro arranca una sesión nueva."); };
+$("#b-copy").onclick = async () => {
+  try { await navigator.clipboard.writeText(S.lastCode); $("#b-copy").textContent = "Copiado"; setTimeout(() => ($("#b-copy").textContent = "Copiar"), 1500); }
+  catch { const r = document.createRange(); r.selectNodeContents($("#code")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); notice("El navegador bloqueó el portapapeles", "El código queda seleccionado: pulsa ⌘C.", "warn"); }
+};
+addEventListener("keydown", (e) => {
+  if (e.altKey && e.key === "Enter") { e.preventDefault(); answerNow("answer"); }
+  if (e.altKey && e.code === "KeyS") { e.preventDefault(); answerNow("solve"); }
+});
+
+/* ── voice ───────────────────────────────────────────────────────────── */
+const guessLang = (t) => (/[áéíóúñ¿¡]|\b(el|la|los|que|de|en|con|para|una|es|un|pero|porque)\b/i.test(t) ? "es-ES" : "en-US");
+function speakLocal(text) {
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = $("#s-lang").value === "auto" ? guessLang(text) : $("#s-lang").value;
+  const same = speechSynthesis.getVoices().filter((v) => v.lang.replace("_", "-").toLowerCase().startsWith(u.lang.slice(0, 2)));
+  u.voice = same.find((v) => /Mónica|Monica|Paulina|Jorge|Samantha|Ava|Daniel/.test(v.name)) || same[0] || null;
+  u.rate = 1.05; speechSynthesis.speak(u);
+}
+function speak(text) {
+  if (!$("#t-voice").checked || !text) return;
+  if ($("#t-pulse").checked) { post("/tts", { text }).then((r) => { if (!r.ok) { notice("Pulse no respondió", "Uso la voz del navegador.", "warn"); speakLocal(text); } }); return; }
+  speakLocal(text);
+}
+
+/* ── floating window ─────────────────────────────────────────────────── */
+$("#b-float").onclick = async () => {
+  if (!("documentPictureInPicture" in window)) return notice("Sin ventana flotante", "Tu navegador no soporta Document Picture-in-Picture (Chrome 116+).", "warn");
+  if (S.pip) return S.pip.close();
+  let pip;
+  try { pip = await documentPictureInPicture.requestWindow({ width: 520, height: 400 }); }
+  catch (e) { return notice("No se pudo abrir la ventana flotante", `${e.name}. Necesita un Chrome normal y un clic tuyo.`, "warn"); }
+  for (const ss of document.styleSheets) { try { const st = document.createElement("style"); st.textContent = [...ss.cssRules].map((r) => r.cssText).join("\n"); pip.document.head.append(st); } catch {} }
+  for (const l of document.querySelectorAll('link[rel="stylesheet"]')) pip.document.head.append(l.cloneNode());
+  pip.document.body.classList.add("pip");
+  pip.document.body.append(document.querySelector(".stage"));
+  S.pip = pip;
+  pip.addEventListener("pagehide", () => { $("main").append(pip.document.querySelector(".stage")); S.pip = null; });
+};
+
+/* ── self-test (?test=1): drives the mock questions through the real transport ── */
+if (new URLSearchParams(location.search).get("test") === "1") {
+  $("#b-test").hidden = false;
+  $("#b-test").onclick = async () => {
+    const qs = [["Samantha", "Thanks for joining. Tell me about yourself and your experience building AI agents in production."],
+                ["Mónica", "¿Cómo garantizas que un agente con herramientas MCP no ejecute acciones destructivas por error?"]];
+    const ctx = new AudioContext({ sampleRate: 16000 }); await ctx.resume();
+    for (const [voice, text] of qs) {
+      notice("Autotest", text.slice(0, 60) + "…");
+      const a = new Audio(`/mock/say?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(text)}`);
+      a.crossOrigin = "anonymous";
+      await new Promise((r) => { a.oncanplaythrough = r; a.onerror = r; a.load(); });
+      const src = ctx.createMediaElementSource(a), proc = ctx.createScriptProcessor(4096, 1, 1), sink = ctx.createGain();
+      sink.gain.value = 0; src.connect(proc); proc.connect(sink); sink.connect(ctx.destination);
+      proc.onaudioprocess = (e) => { const f = e.inputBuffer.getChannelData(0); const buf = new ArrayBuffer(2 + f.length * 2), dv = new DataView(buf); dv.setUint8(0, 0); for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); dv.setInt16(2 + i * 2, v < 0 ? v * 32768 : v * 32767, true); } sendFrame(buf); };
+      S.streams.them = S.streams.them || { getTracks: () => [] };   // so the strips read as armed
+      await a.play(); await new Promise((r) => (a.onended = r)); await new Promise((r) => setTimeout(r, 1500));
+      proc.disconnect(); src.disconnect();
+      await new Promise((r) => setTimeout(r, 13000));
+    }
+  };
+}
+
+speechSynthesis.getVoices();
+connectEvents();
+</script>
+</body>
+</html>

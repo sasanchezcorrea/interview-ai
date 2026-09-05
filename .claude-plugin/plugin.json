@@ -1,0 +1,9 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "interview-ai",
+  "version": "0.1.0",
+  "description": "Interview AI: live interview and meeting copilot. Transcribes the call (Chrome tab + mic), reads the screen, and suggests answers in real time via your Claude subscription.",
+  "author": {
+    "name": "Santiago Sanchez Correa"
+  }
+}
