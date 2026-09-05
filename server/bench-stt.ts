@@ -30,7 +30,9 @@ const HF_BASE = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 // Exercises the real domainPrompt() helper (the one server.ts's agent calls from a job description)
 // rather than hand-rolling a second hardcoded prompt string just for this bench.
 const SAMPLE_JD =
-  "Buscamos Senior AI Engineer con experiencia en agentes MCP, Kubernetes multi-tenant, pipelines RAG con embeddings, y orquestación con LangGraph.";
+  // A Spanish job description on purpose: word error rate on Spanish technical jargon is the
+// thing this bench was built to measure, and it cannot be measured in English.
+"Buscamos Senior AI Engineer con experiencia en agentes MCP, Kubernetes multi-tenant, pipelines RAG con embeddings, y orquestación con LangGraph.";
 const PROMPT_TEXT = domainPrompt(SAMPLE_JD);
 
 // The exact loanword set TASK 2's fixtures were built to cover — the hit-rate axis of the bench.

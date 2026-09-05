@@ -46,7 +46,7 @@ type Voice = { voice_id: string; name: string; category?: string; labels?: Recor
 let voicesCache: { at: number; voices: Voice[] } | null = null;
 let lastError = "";
 
-const NO_KEY = "Sin ELEVENLABS_API_KEY: añade la línea a ~/.config/PAI/.env y reinicia el sidecar.";
+const NO_KEY = "No ELEVENLABS_API_KEY: add the line to ~/.config/PAI/.env and restart the sidecar.";
 
 /** Synchronous by contract, so it reports the cached voice list rather than fetching one. */
 export function voiceHealth(): {
@@ -172,7 +172,7 @@ async function beginCue(ws: ServerWebSocket<unknown>, lang: string, voiceId?: st
   el.addEventListener("error", () => {
     if (s.gen !== gen) return;
     // The close event carries the real reason (401, 1008 quota…); this fires first and blind.
-    lastError = lastError || "la conexión con ElevenLabs falló";
+    lastError = lastError || "the ElevenLabs connection failed";
     reply(ws, { type: "error", error: lastError });
   });
   el.addEventListener("close", (ev) => {

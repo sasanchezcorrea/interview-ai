@@ -94,6 +94,9 @@ export function wavFromPcm16(pcm: Int16Array, sampleRate = SAMPLE_RATE): Uint8Ar
   return new Uint8Array(buf);
 }
 
+// The Spanish alternatives here are load-bearing, not leftovers: they are what makes the
+// trigger fire when an interviewer asks in Spanish. The product ships in English; the
+// languages it LISTENS in are a different question.
 const Q_START = /^(¿\s*)?(qué|que|cómo|como|cuál|cual|cuáles|cuales|cuándo|cuando|dónde|donde|quién|quien|por qué|porqué|cuéntame|cuentame|cuéntanos|explica|explícame|explicame|describe|háblame|hablame|dime|dinos|puedes|podrías|podrias|sabes|tienes|has |what|how|why|when|where|which|who|tell me|tell us|explain|describe|walk me|walk us|can you|could you|would you|do you|did you|have you|are you|is there|what's|whats|let's|lets|write|implement|design|solve|give me|give us|share)\b/i;
 const Q_INSIDE = /\b(cuéntame|háblame|explícame|tell me about|walk me through|how would you|what would you|talk about|your experience with|háblanos de|cuéntanos de)\b/i;
 
