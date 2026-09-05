@@ -51,6 +51,32 @@ const meters: Record<Ch, Meter> = {
   me: { frames: 0, bytes: 0, rms: 0, peak: 0, lastAt: 0, firstAt: 0, dropped: 0 },
 };
 const discarded: Record<Ch, number> = { them: 0, me: 0 };
+/** What has recently gone out of the speakers or come in on the other channel. With speakers on,
+ *  ScreenCaptureKit taps the system output, so the copilot's OWN spoken cue arrives back on the
+ *  interviewer channel — and the copilot would then answer itself. This is the guard. */
+const spoken: { text: string; t: number; src: "cue" | Ch }[] = [];
+const rememberSpoken = (text: string, src: "cue" | Ch) => { if (text.trim()) spoken.push({ text, t: Date.now(), src }); while (spoken.length > 16) spoken.shift(); };
+const norm = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 3);
+/** Fraction of the heard words that also appear in something we just played or received. */
+function echoOverlap(heard: string, ch: Ch): { frac: number; src: string } {
+  const hw = norm(heard);
+  if (hw.length < 3) return { frac: 0, src: "" };
+  let best = { frac: 0, src: "" };
+  for (const s of spoken) {
+    if (Date.now() - s.t > 25_000) continue;
+    // Asymmetric on purpose, because the physics are asymmetric. System audio is the clean source
+    // of the interviewer's voice; the microphone is where it bleeds in second-hand. So the
+    // interviewer channel is only ever checked against cues WE spoke, never against the mic —
+    // checking both ways killed the real question whenever its echo happened to land first.
+    if (ch === "them" && s.src !== "cue") continue;
+    if (ch === "me" && s.src === "me") continue;
+    const words = new Set(norm(s.text));
+    if (!words.size) continue;
+    const frac = hw.filter((w) => words.has(w)).length / hw.length;
+    if (frac > best.frac) best = { frac, src: s.src === "cue" ? "our own voice" : "the other channel" };
+  }
+  return best;
+}
 /** Latency budget. qToVoiceMs is the only number that matches what the candidate feels: silence
  *  between the interviewer stopping and the first spoken word being on screen. The other three
  *  say which stage to blame for it. */
@@ -93,7 +119,7 @@ async function ensureWhisper(): Promise<boolean> {
   // Silero VAD trims the silence our own segmenter leaves at the edges, so whisper decodes less
   // audio per segment. Optional on purpose: a missing model costs latency, never the transcript.
   if (existsSync(VAD_MODEL)) args.push("--vad", "--vad-model", VAD_MODEL, "--vad-threshold", "0.5", "--vad-min-speech-duration-ms", "200", "--vad-min-silence-duration-ms", "300");
-  else log(`VAD desactivado (no hay modelo en ${VAD_MODEL}) — descárgalo con: curl -L --fail -o ${VAD_MODEL} ${VAD_URL}`);
+  else log(`VAD off (no model at ${VAD_MODEL}) — get it with: curl -L --fail -o ${VAD_MODEL} ${VAD_URL}`);
   log("starting whisper-server", WHISPER_MODEL);
   whisperProc = Bun.spawn(args, { stdout: "ignore", stderr: "ignore" });
   for (let i = 0; i < 120; i++) { await Bun.sleep(500); if (await whisperHealthy()) { whisperUp = true; return true; } }
@@ -113,16 +139,16 @@ function watchWhisper() {
     while (restarts.length && now - restarts[0]! > 300_000) restarts.shift();
     if (restarts.length >= 3) {
       whisperUp = false;                                  // stop trying: this is the cap, not a pause
-      status("whisper-server se cayó 3 veces en 5 minutos; sin transcripción hasta reiniciar el sidecar", "error");
+      status("whisper-server went down 3 times in 5 minutes; no transcription unta reiniciar el sidecar", "error");
       return;
     }
     restarts.push(now);
     restarting = true;
-    status(`whisper-server caído; reiniciando (${restarts.length}/3)`, "warn");
+    status(`whisper-server down; restarting (${restarts.length}/3)`, "warn");
     try { whisperProc?.kill(); } catch {}
     const ok = await ensureWhisper();
     restarting = false;                                   // a failed respawn still leaves the next attempt to the cap
-    status(ok ? `whisper-server reiniciado en :${WHISPER_PORT}` : "whisper-server no volvió a arrancar", ok ? "info" : "error");
+    status(ok ? `whisper-server restarted on :${WHISPER_PORT}` : "whisper-server failed to restart", ok ? "info" : "error");
   }, 15_000);
 }
 
@@ -144,7 +170,18 @@ function onSegment(ch: Ch, seg: Segment, endedAt: number) {
   sttQueue = sttQueue.then(async () => {
     try {
       const { text, ms } = await transcribe(seg.pcm);
-      if (isHallucination(text)) { discarded[ch]++; log(`descartado (${ch}): "${text}"`); broadcast({ type: "discard", ch, text }); return; }
+      if (isHallucination(text)) { discarded[ch]++; log(`discarded (${ch}): "${text}"`); broadcast({ type: "discard", ch, text }); return; }
+      // Both channels, not just the microphone: with speakers on, our own cue comes back on the
+      // INTERVIEWER channel, which is the one that triggers answers. Left unguarded the copilot
+      // answers itself.
+      const echo = echoOverlap(text, ch);
+      if (echo.frac >= 0.66) {
+        discarded[ch]++;
+        log(`eco discarded (${ch}): "${text}" — ${Math.round(echo.frac * 100)}% matches ${echo.src}`);
+        broadcast({ type: "discard", ch, text, reason: "echo" });
+        return;
+      }
+      rememberSpoken(text, ch);
       const turn: Turn = { t: Date.now(), ch, text };
       segEndAt.set(turn, endedAt);
       if (ch === "them") sample("sttMs", ms);
@@ -177,7 +214,7 @@ async function runBrain(mode: Mode, effort: Effort, reason: string) {
     await sttQueue;
     const turns = transcript.slice(sentUpTo);
     const attachShot = !!latestShot && (mode === "solve" || shotDirty);
-    if (!turns.length && !attachShot) { status("Nada nuevo que responder todavía"); return; }
+    if (!turns.length && !attachShot) { status("Nothing new to answer yet"); return; }
     const lastQuestion = [...turns].reverse().find((t) => t.ch === "them");
     // The clock starts when the interviewer stopped talking — but only for the automatic path.
     // A manual press can come minutes after that segment closed, and charging the wait to the
@@ -192,6 +229,9 @@ async function runBrain(mode: Mode, effort: Effort, reason: string) {
         broadcast({ type: "cue-delta", chunk, cue });
       },
       onCueDone: (cue) => {
+        // The panel is about to speak this aloud. With speakers on it comes straight back in on
+        // the interviewer channel, so remember it or the copilot answers its own suggestion.
+        rememberSpoken(cue, "cue");
         broadcast({ type: "cue-done", cue });
         if (askedAt && mode === "answer") sample("qToVoiceMs", Date.now() - askedAt);
       },
@@ -260,7 +300,7 @@ let frontmostApp: AppStatus | null = null;
 const nativeHandlers = {
   onAudio: (ch: Ch, pcm: Int16Array) => {
     const m = meters[ch];
-    if (!m.frames) { m.firstAt = Date.now(); log(`audio ${ch}: primera trama nativa (${pcm.length} muestras)`); }
+    if (!m.frames) { m.firstAt = Date.now(); log(`audio ${ch}: first native frame (${pcm.length} samples)`); }
     m.frames++; m.bytes += pcm.byteLength; m.lastAt = Date.now();
     const r = rmsOf(pcm);
     m.rms = m.rms * 0.8 + r * 0.2;
@@ -273,13 +313,13 @@ const nativeHandlers = {
     // thing a shared browser tab could never tell us.
     const changed = frontmostApp?.bundleId !== st.bundleId;
     frontmostApp = st;
-    if (changed) { log(`app en primer plano: ${st.app}`); broadcast({ type: "app", ...st }); }
+    if (changed) { log(`frontmost app: ${st.app}`); broadcast({ type: "app", ...st }); }
   },
   onLog: (line: string) => log(`[helper] ${line}`),
   onExit: (code: number | null, tccDenied: boolean) => {
-    if (tccDenied) status("macOS denegó Grabación de pantalla o Micrófono al sidecar. Concédelo en Ajustes → Privacidad y seguridad y vuelve a arrancar.", "error");
-    else if (code) status(`La captura nativa terminó con código ${code}`, "error");
-    else status("Captura nativa detenida");
+    if (tccDenied) status("macOS denied Screen Recording or Microphone to the sidecar. Grant it in Settings → Privacy & Security and start again.", "error");
+    else if (code) status(`The native capture exited with code ${code}`, "error");
+    else status("Native capture stopped");
     broadcast({ type: "native", ...nativeStatus() });
   },
 };
@@ -322,7 +362,7 @@ const server = Bun.serve<WsData>({
           display: typeof body.display === "number" ? body.display : undefined,
           mic: body.mic !== false, audio: body.audio !== false, screen: body.screen !== false,
         }, nativeHandlers);
-        if (r.ok) status("Captura nativa iniciada: audio del sistema, micro y pantalla, sin selector");
+        if (r.ok) status("Native capture started: system audio, microphone and screen, no picker");
         broadcast({ type: "native", ...nativeStatus() });
         return json(r.ok ? { ok: true, ...nativeStatus() } : { ok: false, error: r.error }, { status: r.ok ? 200 : 409 });
       }
@@ -330,7 +370,7 @@ const server = Bun.serve<WsData>({
       if (p === "/answer-now") {
         const mode: Mode = body.mode === "solve" ? "solve" : "answer";
         const effort: Effort = body.effort === "deep" ? "deep" : settings.effort;
-        if (mode === "solve" && !latestShot) return json({ ok: false, error: "No hay captura de pantalla todavía: activa Capturar llamada o Pantalla completa" }, { status: 409 });
+        if (mode === "solve" && !latestShot) return json({ ok: false, error: "No screenshot yet: turn on a capture source first" }, { status: 409 });
         scheduleAnswer(mode, effort, "manual");
         return json({ ok: true });
       }
@@ -338,7 +378,7 @@ const server = Bun.serve<WsData>({
         const jd = String(body.jd ?? "").trim();
         writeFileSync(join(USER_DIR, "jd.md"), jd ? `# Job / meeting context\n\n${jd}\n` : "");
         brain.reset();
-        status(jd ? "Contexto guardado; nueva sesión del cerebro" : "Contexto vacío; nueva sesión del cerebro");
+        status(jd ? "Context saved; the brain starts a fresh session" : "Context cleared; the brain starts a fresh session");
         return json({ ok: true, brain: brain.info() });
       }
       if (p === "/settings") {
@@ -359,7 +399,7 @@ const server = Bun.serve<WsData>({
         try {
           const r = await fetch(PULSE_NOTIFY, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "Interview AI", message: text, voice_id: body.voice_id ?? undefined }), signal: AbortSignal.timeout(8000) });
           return json({ ok: r.ok, status: r.status });
-        } catch (e) { return json({ ok: false, error: `Pulse no responde: ${(e as Error).message}` }, { status: 502 }); }
+        } catch (e) { return json({ ok: false, error: `Pulse is not responding: ${(e as Error).message}` }, { status: 502 }); }
       }
       return new Response("not found", { status: 404 });
     }
@@ -380,9 +420,9 @@ const server = Bun.serve<WsData>({
         // Bun's Buffer.slice is subarray, so .buffer handed back the whole pool: a garbage
         // leading sample today, and out-of-bounds reads the moment Bun pools receive buffers.
         pcm = new Int16Array(bytes.buffer, bytes.byteOffset + 2, (bytes.byteLength - 2) >> 1);
-      } catch (e) { status(`Trama de audio ilegible: ${(e as Error).message}`, "error"); return; }
+      } catch (e) { status(`Unreadable audio frame: ${(e as Error).message}`, "error"); return; }
       const m = meters[ch];
-      if (!m.frames) { m.firstAt = Date.now(); log(`audio ${ch}: primera trama (${pcm.length} muestras)`); }
+      if (!m.frames) { m.firstAt = Date.now(); log(`audio ${ch}: first frame (${pcm.length} samples)`); }
       m.frames++; m.bytes += bytes.byteLength; m.lastAt = Date.now();
       const r = rmsOf(pcm);
       m.rms = m.rms * 0.8 + r * 0.2;          // smoothed, for the level meter
@@ -402,10 +442,10 @@ if (priorShots.length) {
 log(`Interview AI sidecar → http://127.0.0.1:${server.port}  (mock interviewer: /mock)`);
 log(`brain: ${JSON.stringify(brain.info())}`);
 ensureWhisper().then((ok) => {
-  status(ok ? `whisper-server listo en :${WHISPER_PORT}${existsSync(VAD_MODEL) ? " (VAD on)" : " (VAD off)"}` : "sin transcripción: whisper-server no disponible", ok ? "info" : "error");
+  status(ok ? `whisper-server ready on :${WHISPER_PORT}${existsSync(VAD_MODEL) ? " (VAD on)" : " (VAD off)"}` : "no transcription: whisper-server unavailable", ok ? "info" : "error");
   // The ~2.4 s `claude` boot is paid here, on an empty room, instead of on the first real question.
   brain.warm();
-  log("brain: proceso pre-calentado");
+  log("brain: process pre-warmed");
   if (ok) watchWhisper();
 });
 

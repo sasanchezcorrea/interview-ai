@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -46,7 +46,7 @@ header{display:flex; align-items:center; justify-content:space-between; gap:16px
 .readout{display:flex; flex-direction:column; gap:2px; align-items:flex-end; min-width:74px}
 .readout b{font-family:"IBM Plex Mono",monospace; font-weight:500; font-size:var(--step-0); font-variant-numeric:tabular-nums}
 
-/* ── channel strips: the honest answer to "¿me está oyendo?" ─────────── */
+/* ── channel strips: the honest answer to "is it hearing me?" ─────────── */
 .strips{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rail); border-bottom:1px solid var(--rail)}
 .strip{background:var(--desk); padding:9px 20px; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:14px}
 .strip .who{display:flex; align-items:center; gap:8px; min-width:132px}
@@ -149,58 +149,58 @@ body.pip #cue{font-size:1.35rem}
 <header>
   <div class="mark">
     <b>Interview AI</b>
-    <span>lo que ves aquí lo dices y lo escribes tú</span>
+    <span>everything here is yours to say and type</span>
   </div>
   <div class="readouts">
-    <div class="tally" id="tally"><i></i><span class="lbl" id="tally-text" style="color:inherit">en espera</span></div>
-    <div class="readout"><span class="lbl">transcripción</span><b id="r-stt">—</b></div>
+    <div class="tally" id="tally"><i></i><span class="lbl" id="tally-text" style="color:inherit">standby</span></div>
+    <div class="readout"><span class="lbl">transcript</span><b id="r-stt">—</b></div>
     <div class="readout"><span class="lbl">modelo</span><b id="r-model">—</b></div>
     <div class="readout" id="ro-ft" style="min-width:64px"><span class="lbl">primer token</span><b id="r-ft">—</b></div>
-    <div class="readout" id="ro-lat" title="Aún sin medidas de latencia."><span class="lbl">pregunta → voz</span><b id="r-lat">—</b></div>
+    <div class="readout" id="ro-lat" title="No latency measured yet."><span class="lbl">pregunta → voz</span><b id="r-lat">—</b></div>
   </div>
 </header>
 
 <section class="strips">
   <div class="strip" id="strip-them" data-state="off" style="--ch:var(--them)">
-    <div class="who"><span class="dot"></span><span class="name">Entrevistador</span></div>
+    <div class="who"><span class="dot"></span><span class="name">Interviewer</span></div>
     <div class="meter"><div class="fill"></div><div class="pk"></div><div class="ticks"></div></div>
-    <div class="stat">sin captura</div>
+    <div class="stat">no source</div>
   </div>
   <div class="strip" id="strip-me" data-state="off" style="--ch:var(--me)">
-    <div class="who"><span class="dot"></span><span class="name">Tú</span></div>
+    <div class="who"><span class="dot"></span><span class="name">You</span></div>
     <div class="meter"><div class="fill"></div><div class="pk"></div><div class="ticks"></div></div>
-    <div class="stat">micro apagado</div>
+    <div class="stat">mic off</div>
   </div>
 </section>
 <div id="appbar" class="lbl" style="padding:6px 20px;border-bottom:1px solid var(--rail);background:var(--desk)" hidden></div>
 
 <section class="ctx" id="ctx" hidden>
-  <textarea id="jd" placeholder="Pega la oferta, el rol o el contexto de la reunión. Se combina con tu dossier en cada respuesta."></textarea>
+  <textarea id="jd" placeholder="Paste the job posting, the role, or the meeting context. It is combined with your dossier on every answer."></textarea>
   <div style="display:flex; flex-direction:column; gap:7px; align-items:flex-start">
-    <button class="primary" id="b-savectx">Guardar y reiniciar sesión</button>
+    <button class="primary" id="b-savectx">Save and restart session</button>
     <span class="lbl" id="ctx-info"></span>
   </div>
 </section>
 
 <main>
   <section class="log">
-    <h2><span class="lbl">Transcripción</span><span class="lbl mono" id="t-count"></span></h2>
-    <div id="turns"><p class="empty">Aún no ha entrado audio. Elige una fuente abajo.</p></div>
+    <h2><span class="lbl">Transcript</span><span class="lbl mono" id="t-count"></span></h2>
+    <div id="turns"><p class="empty">No audio yet. Pick a source below.</p></div>
   </section>
 
   <section class="stage">
     <div class="cue" id="cuecard">
-      <div class="meta"><span class="lbl">Di ahora</span><span class="lbl mono" id="cue-meta"></span></div>
-      <p id="cue" class="idle">Elige una fuente de audio abajo. Cuando el entrevistador pregunte, aquí aparece la frase con la que abrir, y la lees tú.</p>
+      <div class="meta"><span class="lbl">Say now</span><span class="lbl mono" id="cue-meta"></span></div>
+      <p id="cue" class="idle">Pick an audio source below. When the interviewer asks something, the line to open with appears here, and you say it.</p>
     </div>
     <ul id="points"></ul>
     <div class="slab" id="codewrap" hidden>
-      <header><span class="lbl mono" id="code-lang">code</span><button id="b-copy">Copiar</button></header>
+      <header><span class="lbl mono" id="code-lang">code</span><button id="b-copy">Copy</button></header>
       <pre><code id="code"></code></pre>
     </div>
     <div id="monitor" hidden>
-      <div class="meta" style="display:flex; justify-content:space-between; margin-bottom:7px"><span class="lbl">Pantalla compartida</span><span class="lbl mono" id="shot-meta"></span></div>
-      <img id="shot" alt="Última captura de la pantalla compartida">
+      <div class="meta" style="display:flex; justify-content:space-between; margin-bottom:7px"><span class="lbl">Shared screen</span><span class="lbl mono" id="shot-meta"></span></div>
+      <img id="shot" alt="Latest frame of the shared screen">
     </div>
   </section>
 </main>
@@ -209,35 +209,35 @@ body.pip #cue{font-size:1.35rem}
 
 <section class="console">
   <div class="group">
-    <span class="lbl" style="margin-right:3px">Fuente</span>
-    <button id="b-tab" data-state="off" title="Para llamadas en el navegador: Meet, Teams web, Zoom web. Elige la PESTAÑA y marca «Compartir audio de la pestaña»."><span class="led"></span>Pestaña</button>
-    <button id="b-screen" data-state="off" title="Para Zoom o Teams de escritorio. Elige «Pantalla completa» y marca «Compartir audio del sistema»."><span class="led"></span>Pantalla + sistema</button>
-    <button id="b-mic" data-state="off" title="Tu voz entra como contexto para las siguientes respuestas."><span class="led"></span>Micro</button>
-    <button id="b-native" data-state="off" title="Captura nativa de macOS: audio del sistema, micro y pantalla completa, sin selector ni casillas. Cubre Zoom y Teams de escritorio y sabe en qué app estás."><span class="led"></span>Sistema</button>
+    <span class="lbl" style="margin-right:3px">Source</span>
+    <button id="b-tab" data-state="off" title="For browser calls: Meet, Teams web, Zoom web. Pick the TAB and tick \u00abAlso share tab audio\u00bb."><span class="led"></span>Tab</button>
+    <button id="b-screen" data-state="off" title="For desktop Zoom or Teams. Pick \u00abEntire Screen\u00bb and tick \u00abAlso share system audio\u00bb."><span class="led"></span>Screen + system</button>
+    <button id="b-mic" data-state="off" title="Your voice becomes context for the answers that follow."><span class="led"></span>Mic</button>
+    <button id="b-native" data-state="off" title="Native macOS capture: system audio, microphone and full screen, no picker and no checkbox. Covers desktop Zoom and Teams, and knows which app you are in."><span class="led"></span>System</button>
   </div>
   <div class="divider"></div>
   <div class="group">
-    <button class="primary" id="b-answer">Responder ahora <kbd>⌥↵</kbd></button>
-    <button id="b-solve">Resolver lo que se ve <kbd>⌥S</kbd></button>
+    <button class="primary" id="b-answer">Answer now <kbd>⌥↵</kbd></button>
+    <button id="b-solve">Solve what's on screen <kbd>⌥S</kbd></button>
     <label class="switch"><input type="checkbox" id="t-deep"> Deep</label>
     <label class="switch"><input type="checkbox" id="t-auto" checked> Auto</label>
   </div>
   <div class="divider"></div>
   <div class="group">
-    <label class="switch"><input type="checkbox" id="t-voice" checked> Voz</label>
-    <select id="s-lang" aria-label="Idioma de la voz"><option value="auto">auto</option><option value="es-ES">es</option><option value="en-US">en</option></select>
-    <label class="switch" title="Usa ElevenLabs vía Pulse en vez de la voz del navegador"><input type="checkbox" id="t-pulse"> Pulse</label>
+    <label class="switch"><input type="checkbox" id="t-voice" checked> Voice</label>
+    <select id="s-lang" aria-label="Voice language"><option value="auto">auto</option><option value="es-ES">es</option><option value="en-US">en</option></select>
+    <label class="switch" title="Use ElevenLabs through Pulse instead of the browser voice"><input type="checkbox" id="t-pulse"> Pulse</label>
   </div>
   <div class="divider"></div>
   <div class="group">
-    <button class="quiet" id="b-float">Flotar</button>
-    <button class="quiet" id="b-ctx">Contexto</button>
-    <button class="quiet" id="b-reset">Nueva ronda</button>
-    <button class="quiet" id="b-test" hidden>Autotest</button>
+    <button class="quiet" id="b-float">Float</button>
+    <button class="quiet" id="b-ctx">Context</button>
+    <button class="quiet" id="b-reset">New round</button>
+    <button class="quiet" id="b-test" hidden>Self-test</button>
   </div>
 </section>
 
-<footer><span id="status">Listo.</span><span id="brain-info" class="mono"></span></footer>
+<footer><span id="status">Ready.</span><span id="brain-info" class="mono"></span></footer>
 <video id="vid-tab" muted playsinline hidden></video><video id="vid-screen" muted playsinline hidden></video>
 
 <script>
@@ -259,7 +259,7 @@ function notice(title, body, level = "info", { sticky = false, id = null, steps 
   n.querySelector("span").textContent = body;
   if (steps) n.querySelectorAll("li").forEach((li, i) => (li.textContent = steps[i]));
   if (action) { const b = document.createElement("button"); b.textContent = action.label; b.onclick = () => { n.remove(); action.run(); }; n.append(b); }
-  const close = document.createElement("button"); close.textContent = sticky ? "Entendido" : "Cerrar";
+  const close = document.createElement("button"); close.textContent = sticky ? "Got it" : "Close";
   close.style.marginLeft = action ? "7px" : "0"; close.onclick = () => n.remove(); n.append(close);
   $("#notices").append(n);
   if (!sticky) setTimeout(() => n.remove(), 7000);
@@ -271,8 +271,8 @@ const hhmmss = (t) => new Date(t).toLocaleTimeString("es-ES", { hour12: false })
 /* ── events channel ──────────────────────────────────────────────────── */
 function connectEvents() {
   const ws = new WebSocket(`ws://${location.host}/events`);
-  ws.onopen = () => { $("#status").textContent = "Conectado al sidecar."; };
-  ws.onclose = () => { setTally("off", "sin servidor"); setTimeout(connectEvents, 1500); };
+  ws.onopen = () => { $("#status").textContent = "Connected to the sidecar."; };
+  ws.onclose = () => { setTally("off", "no sidecar"); setTimeout(connectEvents, 1500); };
   ws.onmessage = (m) => handle(JSON.parse(m.data));
 }
 function setTally(state, text) {
@@ -286,9 +286,9 @@ function handle(ev) {
       $("#t-auto").checked = ev.settings.auto; $("#t-deep").checked = ev.settings.effort === "deep";
       $("#jd").value = ev.jd || ""; brainInfo(ev.brain);
       if (ev.latestShot) showShot(`/shots/${ev.latestShot.path.split("/").pop()}`, ev.latestShot.t);
-      setTally("idle", "en espera");
+      setTally("idle", "standby");
       if (ev.native) paintNative(ev.native);
-      if (ev.frontmostApp) { $("#appbar").hidden = false; $("#appbar").textContent = `App en primer plano · ${ev.frontmostApp.app}`; }
+      if (ev.frontmostApp) { $("#appbar").hidden = false; $("#appbar").textContent = `Frontmost app · ${ev.frontmostApp.app}`; }
       fetch("/health").then((r) => r.json()).then((h) => { $("#r-stt").textContent = h.whisper ? "whisper" : "sin whisper"; }).catch(() => {});
       break;
     case "meters": paintMeters(ev.meters); break;
@@ -296,29 +296,29 @@ function handle(ev) {
     case "thinking":
       S.cue = null;                                     // a new round: nothing streamed or spoken yet
       $("#cuecard").classList.add("thinking"); setTally("live", ev.effort === "deep" ? "opus" : "sonnet");
-      $("#cue-meta").textContent = `${ev.mode}${ev.shot ? " + pantalla" : ""} · ${ev.turns} turnos`;
+      $("#cue-meta").textContent = `${ev.mode}${ev.shot ? " + pantalla" : ""} · ${ev.turns} turns`;
       break;
     case "cue-delta": cueDelta(ev); break;
     case "cue-done": cueDone(ev); break;
     case "answer": showAnswer(ev); break;
     case "latency": showLatency(ev); break;
     case "shot": showShot(ev.url, Date.now()); break;
-    case "discard": $("#status").textContent = `Audio descartado por muy corto o mudo: "${ev.text}"`; break;
+    case "discard": $("#status").textContent = `Audio discarded: too short or silent: "${ev.text}"`; break;
     case "status": if (ev.level && ev.level !== "info") notice(ev.message, "", ev.level); else $("#status").textContent = ev.message; break;
     case "settings": $("#t-auto").checked = ev.auto; $("#t-deep").checked = ev.effort === "deep"; break;
     case "native": paintNative(ev); break;
     case "app":
       $("#appbar").hidden = false;
-      $("#appbar").textContent = `App en primer plano · ${ev.app}${ev.title ? " — " + ev.title : ""}`;
+      $("#appbar").textContent = `Frontmost app · ${ev.app}${ev.title ? " — " + ev.title : ""}`;
       break;
-    case "reset": S.cue = null; speechSynthesis.cancel(); $("#turns").innerHTML = ""; emptyLog(); $("#t-count").textContent = ""; brainInfo(ev.brain); notice("Nueva ronda", "Sesión y transcripción reiniciadas."); break;
+    case "reset": S.cue = null; speechSynthesis.cancel(); $("#turns").innerHTML = ""; emptyLog(); $("#t-count").textContent = ""; brainInfo(ev.brain); notice("New round", "Session and transcript reset."); break;
   }
 }
-function emptyLog() { $("#turns").innerHTML = '<p class="empty">Aún no ha entrado audio. Elige una fuente abajo.</p>'; }
+function emptyLog() { $("#turns").innerHTML = '<p class="empty">No audio yet. Pick a source below.</p>'; }
 function brainInfo(b) {
   if (!b) return;
   $("#brain-info").textContent = `dossier ${b.dossier ? "✓" : "✗"} · contexto ${b.jd ? "✓" : "✗"} · ${b.models.quick} / ${b.models.deep}`;
-  $("#ctx-info").textContent = b.dossier ? "Dossier cargado" : "Sin dossier: ejecuta /interview-ai:prep";
+  $("#ctx-info").textContent = b.dossier ? "Dossier loaded" : "No dossier: run /interview-ai:prep";
 }
 
 /* ── channel strips: level, state, and the truth about audio ─────────── */
@@ -329,13 +329,13 @@ function paintMeters(m) {
     const fps = prev ? Math.round((cur.frames - prev.frames) * 2) : 0;
     S.meterPrev[ch] = { frames: cur.frames };
     const armed = !!S.streams[ch];
-    if (!armed) { strip.dataset.state = "off"; st.textContent = ch === "them" ? "sin captura" : "micro apagado"; setLevel(strip, 0, 0); continue; }
+    if (!armed) { strip.dataset.state = "off"; st.textContent = ch === "them" ? "no source" : "mic off"; setLevel(strip, 0, 0); continue; }
     const fresh = Date.now() - cur.lastAt < 1500;
-    if (!fresh) { strip.dataset.state = "armed"; st.textContent = "sin tramas"; setLevel(strip, 0, 0); continue; }
+    if (!fresh) { strip.dataset.state = "armed"; st.textContent = "no frames"; setLevel(strip, 0, 0); continue; }
     // Frames arriving but flat: a real, common failure (surface shared without its audio).
     const silent = cur.peak < 0.004;
     strip.dataset.state = silent ? "mute" : "live";
-    st.textContent = silent ? "muda" : `${fps}/s · ${(20 * Math.log10(Math.max(cur.rms, 1e-4))).toFixed(0)} dB`;
+    st.textContent = silent ? "silent" : `${fps}/s · ${(20 * Math.log10(Math.max(cur.rms, 1e-4))).toFixed(0)} dB`;
     setLevel(strip, cur.rms, cur.peak);
     if (silent) { S.noAudioSince[ch] = S.noAudioSince[ch] || Date.now(); if (Date.now() - S.noAudioSince[ch] > 8000) warnSilent(ch); }
     else S.noAudioSince[ch] = 0;
@@ -347,9 +347,9 @@ function setLevel(strip, rms, peak) {
   strip.querySelector(".pk").style.left = (scale(peak) * 100).toFixed(1) + "%";
 }
 function warnSilent(ch) {
-  notice("Llega audio, pero está mudo",
-    ch === "them" ? "La fuente entrega una pista de audio con todo a cero. Casi siempre es la casilla de audio sin marcar." : "El micro entrega silencio: revisa el dispositivo de entrada del sistema.",
-    "warn", { sticky: true, id: "silent-" + ch, steps: ch === "them" ? ["Detén la captura y vuelve a elegir la fuente.", "Marca «Compartir audio de la pestaña» o «del sistema» antes de aceptar."] : null });
+  notice("Audio is arriving, but it is silent",
+    ch === "them" ? "The source delivers an audio track of pure zeros. Almost always the audio checkbox was left unticked." : "The microphone delivers silence: check the system input device.",
+    "warn", { sticky: true, id: "silent-" + ch, steps: ch === "them" ? ["Stop the capture and pick the source again.", "Tick \u00abAlso share tab audio\u00bb or \u00abAlso share system audio\u00bb before you accept."] : null });
 }
 
 /* ── transcript ──────────────────────────────────────────────────────── */
@@ -358,7 +358,7 @@ function addTurn(t) {
   const d = document.createElement("article");
   d.className = "turn " + t.ch + (t.ch === "them" && /[?¿]/.test(t.text) ? " ask" : "");
   d.innerHTML = '<div class="tick"></div><div><div class="head"><b></b><time></time></div><p></p></div>';
-  d.querySelector("b").textContent = t.ch === "them" ? "Entrevistador" : "Tú";
+  d.querySelector("b").textContent = t.ch === "them" ? "Interviewer" : "You";
   d.querySelector("time").textContent = hhmmss(t.t);
   d.querySelector("p").textContent = t.text;
   box.append(d); box.scrollTop = box.scrollHeight;
@@ -430,12 +430,12 @@ function sayClause(piece) {
 }
 
 function showAnswer(a) {
-  $("#cuecard").classList.remove("thinking"); setTally("idle", "en espera");
+  $("#cuecard").classList.remove("thinking"); setTally("idle", "standby");
   $("#r-model").textContent = (a.model || "").replace("claude-", "");
   if (a.firstTokenMs != null) $("#r-ft").textContent = dur(a.firstTokenMs);
   const streamed = !!(S.cue && S.cue.text);
   const cue = (a.cue || "").trim();
-  $("#cue").textContent = cue || "Ese turno no pedía respuesta. Sigue escuchando.";
+  $("#cue").textContent = cue || "That turn needed no answer. Keep listening.";
   $("#cue").classList.toggle("idle", !cue);
   $("#cue-meta").textContent = `${a.mode} · ${dur(a.totalMs)}`;
   const ul = $("#points"); ul.innerHTML = "";
@@ -465,7 +465,7 @@ function openAudioWs() {
   ws.binaryType = "arraybuffer";
   ws.onopen = () => { S.queue.splice(0).forEach((b) => ws.send(b)); };
   ws.onclose = () => { S.audioWs = null; if (Object.keys(S.streams).length) setTimeout(openAudioWs, 800); };
-  ws.onerror = () => notice("Se cortó el canal de audio", "Reintentando la conexión con el sidecar.", "warn");
+  ws.onerror = () => notice("The audio channel dropped", "Reconnecting to the sidecar.", "warn");
   S.audioWs = ws; return ws;
 }
 function sendFrame(buf) {
@@ -554,8 +554,8 @@ async function capture(kind) {
     });
   } catch (e) {
     ctx.close();
-    if (e.name === "NotAllowedError") notice("Captura cancelada", "No se eligió ninguna fuente.", "warn");
-    else notice("No se pudo iniciar la captura", `${e.name}: ${e.message}`, "error");
+    if (e.name === "NotAllowedError") notice("Capture cancelled", "No source was picked.", "warn");
+    else notice("Could not start the capture", `${e.name}: ${e.message}`, "error");
     return;
   }
   S.streams.them = stream;
@@ -565,23 +565,23 @@ async function capture(kind) {
   if (!res.ok) {
     setSourceState(btn, "armed");
     ctx.close();
-    if (res.reason === "suspended") notice("El motor de audio no arrancó", "El navegador dejó el contexto de audio suspendido. Vuelve a pulsar la fuente.", "error", { sticky: true });
+    if (res.reason === "suspended") notice("The audio engine never started", "The browser left the audio context suspended. Press the source again.", "error", { sticky: true });
     else noAudioCard(kind, surface);
   } else {
     setSourceState(btn, "live");
-    notice("Fuente capturada", `Superficie: ${surface}. Vigila el vúmetro del entrevistador.`);
+    notice("Source capturada", `Surface: ${surface}. Watch the interviewer's meter.`);
   }
   ensureShotTimer(); setTimeout(() => takeShot(true), 700);
-  stream.getVideoTracks()[0].addEventListener("ended", () => { stopSource("them"); notice("Captura detenida", "Se dejó de compartir la fuente.", "warn"); });
+  stream.getVideoTracks()[0].addEventListener("ended", () => { stopSource("them"); notice("Capture stopped", "The source stopped being shared.", "warn"); });
 }
 function noAudioCard(kind, surface) {
-  notice("Esa captura no trae audio",
-    `Compartiste «${surface}» sin pista de audio, así que no habrá transcripción. El vídeo sí funciona.`,
+  notice("That capture has no audio",
+    `You shared \u00ab${surface}\u00bb with no audio track, so there will be no transcript. Video still works.`,
     "error", { sticky: true, id: "no-audio",
       steps: kind === "tab"
-        ? ["Vuelve a pulsar Pestaña.", "Elige la pestaña de la llamada en la sección «Pestaña de Chrome».", "Marca «Compartir audio de la pestaña» antes de aceptar."]
-        : ["Vuelve a pulsar Pantalla + sistema.", "Elige «Pantalla completa».", "Marca «Compartir audio del sistema» antes de aceptar."],
-      action: { label: "Reintentar", run: () => capture(kind) } });
+        ? ["Press Tab again.", "Pick the call\u2019s tab under \u00abChrome Tab\u00bb.", "Tick \u00abAlso share tab audio\u00bb before you accept."]
+        : ["Vuelve a pulsar Screen + system.", "Pick \u00abEntire Screen\u00bb.", "Tick \u00abAlso share system audio\u00bb before you accept."],
+      action: { label: "Retry", run: () => capture(kind) } });
 }
 $("#b-tab").onclick = () => capture("tab");
 $("#b-screen").onclick = () => capture("screen");
@@ -591,11 +591,11 @@ $("#b-mic").onclick = async () => {
   const ctx = new AudioContext({ sampleRate: 16000 });
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
-  catch (e) { ctx.close(); return notice("Micro no disponible", `${e.name}: ${e.message}`, "error"); }
+  catch (e) { ctx.close(); return notice("Mic no disponible", `${e.name}: ${e.message}`, "error"); }
   S.streams.me = stream;
   const res = await pipePCM(ctx, stream, "me");
   setSourceState("b-mic", res.ok ? "live" : "armed");
-  if (!res.ok) { ctx.close(); notice("El micro no entrega audio", res.reason === "suspended" ? "El contexto de audio quedó suspendido." : "El dispositivo no expone ninguna pista.", "error", { sticky: true }); }
+  if (!res.ok) { ctx.close(); notice("The microphone delivers no audio", res.reason === "suspended" ? "The audio context stayed suspended." : "The device exposes no track.", "error", { sticky: true }); }
 };
 
 /* ── screen frames ───────────────────────────────────────────────────── */
@@ -615,8 +615,8 @@ async function takeShot(force = false) {
   const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.6));
   try {
     const r = await fetch("/shot", { method: "POST", headers: { "content-type": "image/jpeg" }, body: blob });
-    if (!r.ok && !S.shotWarned) { S.shotWarned = true; notice("El servidor rechazó la captura", `HTTP ${r.status}`, "warn"); }
-  } catch (e) { if (!S.shotWarned) { S.shotWarned = true; notice("No se pudo enviar la captura", e.message, "warn"); } }
+    if (!r.ok && !S.shotWarned) { S.shotWarned = true; notice("The server rejected the screenshot", `HTTP ${r.status}`, "warn"); }
+  } catch (e) { if (!S.shotWarned) { S.shotWarned = true; notice("Could not send the screenshot", e.message, "warn"); } }
 }
 function ensureShotTimer() { if (!S.shotTimer) S.shotTimer = setInterval(takeShot, 4000); }
 
@@ -626,8 +626,8 @@ async function answerNow(mode) {
   try {
     if (mode === "solve") await takeShot(true);
     const r = await post("/answer-now", { mode, effort: effort() });
-    if (!r.ok) notice("No se pidió la respuesta", (await r.json().catch(() => ({}))).error || `HTTP ${r.status}`, "warn");
-  } catch (e) { notice("El sidecar no responde", `${e.message}. Comprueba que sigue vivo.`, "error"); }
+    if (!r.ok) notice("The answer was not requested", (await r.json().catch(() => ({}))).error || `HTTP ${r.status}`, "warn");
+  } catch (e) { notice("The sidecar is not responding", `${e.message}. Check that it is still alive.`, "error"); }
 }
 $("#b-answer").onclick = () => answerNow("answer");
 $("#b-solve").onclick = () => answerNow("solve");
@@ -635,10 +635,10 @@ $("#t-deep").onchange = () => post("/settings", { effort: effort() });
 $("#t-auto").onchange = () => post("/settings", { auto: $("#t-auto").checked });
 $("#b-reset").onclick = () => post("/reset");
 $("#b-ctx").onclick = () => ($("#ctx").hidden = !$("#ctx").hidden);
-$("#b-savectx").onclick = async () => { await post("/context", { jd: $("#jd").value }); $("#ctx").hidden = true; notice("Contexto guardado", "El cerebro arranca una sesión nueva."); };
+$("#b-savectx").onclick = async () => { await post("/context", { jd: $("#jd").value }); $("#ctx").hidden = true; notice("Context guardado", "The brain starts a fresh session."); };
 $("#b-copy").onclick = async () => {
-  try { await navigator.clipboard.writeText(S.lastCode); $("#b-copy").textContent = "Copiado"; setTimeout(() => ($("#b-copy").textContent = "Copiar"), 1500); }
-  catch { const r = document.createRange(); r.selectNodeContents($("#code")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); notice("El navegador bloqueó el portapapeles", "El código queda seleccionado: pulsa ⌘C.", "warn"); }
+  try { await navigator.clipboard.writeText(S.lastCode); $("#b-copy").textContent = "Copied"; setTimeout(() => ($("#b-copy").textContent = "Copy"), 1500); }
+  catch { const r = document.createRange(); r.selectNodeContents($("#code")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); notice("The browser blocked the clipboard", "The code is selected: press ⌘C.", "warn"); }
 };
 addEventListener("keydown", (e) => {
   if (e.altKey && e.key === "Enter") { e.preventDefault(); answerNow("answer"); }
@@ -663,7 +663,7 @@ function speak(text, lang) {
     // ponytail: chained so clauses reach Pulse in order; gapless playback would need a queue over there.
     S.ttsChain = S.ttsChain
       .then(() => post("/tts", { text }))
-      .then((r) => { if (!r.ok) { notice("Pulse no respondió", "Uso la voz del navegador.", "warn"); speakLocal(text, lang); } })
+      .then((r) => { if (!r.ok) { notice("Pulse did not answer", "Falling back to the browser voice.", "warn"); speakLocal(text, lang); } })
       .catch(() => speakLocal(text, lang));
     return;
   }
@@ -672,11 +672,11 @@ function speak(text, lang) {
 
 /* ── floating window ─────────────────────────────────────────────────── */
 $("#b-float").onclick = async () => {
-  if (!("documentPictureInPicture" in window)) return notice("Sin ventana flotante", "Tu navegador no soporta Document Picture-in-Picture (Chrome 116+).", "warn");
+  if (!("documentPictureInPicture" in window)) return notice("No floating window", "Your browser does not support Document Picture-in-Picture (Chrome 116+).", "warn");
   if (S.pip) return S.pip.close();
   let pip;
   try { pip = await documentPictureInPicture.requestWindow({ width: 520, height: 400 }); }
-  catch (e) { return notice("No se pudo abrir la ventana flotante", `${e.name}. Necesita un Chrome normal y un clic tuyo.`, "warn"); }
+  catch (e) { return notice("Could not open the floating window", `${e.name}. It needs a normal Chrome window and a click from you.`, "warn"); }
   for (const ss of document.styleSheets) { try { const st = document.createElement("style"); st.textContent = [...ss.cssRules].map((r) => r.cssText).join("\n"); pip.document.head.append(st); } catch {} }
   for (const l of document.querySelectorAll('link[rel="stylesheet"]')) pip.document.head.append(l.cloneNode());
   pip.document.body.classList.add("pip");
@@ -690,10 +690,11 @@ if (new URLSearchParams(location.search).get("test") === "1") {
   $("#b-test").hidden = false;
   $("#b-test").onclick = async () => {
     const qs = [["Samantha", "Thanks for joining. Tell me about yourself and your experience building AI agents in production."],
-                ["Mónica", "¿Cómo garantizas que un agente con herramientas MCP no ejecute acciones destructivas por error?"]];
+                // Deliberately Spanish: the brain replies in the interviewer's language, and this proves it.
+    ["Mónica", "¿Cómo garantizas que un agente con herramientas MCP no ejecute acciones destructivas por error?"]];
     const ctx = new AudioContext({ sampleRate: 16000 }); await ctx.resume();
     for (const [voice, text] of qs) {
-      notice("Autotest", text.slice(0, 60) + "…");
+      notice("Self-test", text.slice(0, 60) + "…");
       const a = new Audio(`/mock/say?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(text)}`);
       a.crossOrigin = "anonymous";
       await new Promise((r) => { a.oncanplaythrough = r; a.onerror = r; a.load(); });
@@ -713,22 +714,22 @@ function paintNative(n) {
   const b = $("#b-native");
   b.dataset.state = n.running ? (n.counts && n.counts.audio > 0 ? "live" : "armed") : "off";
   b.textContent = ""; b.append(Object.assign(document.createElement("span"), { className: "led" }),
-                              document.createTextNode(n.running ? "Sistema activo" : "Sistema"));
+                              document.createTextNode(n.running ? "System on" : "System"));
   S.streams.them = n.running ? (S.streams.them || { getTracks: () => [] }) : S.streams.them;
   S.streams.me = n.running ? (S.streams.me || { getTracks: () => [] }) : S.streams.me;
-  if (n.lastError) notice("Captura nativa", n.lastError, "error", { sticky: true, id: "native-err" });
+  if (n.lastError) notice("Native capture", n.lastError, "error", { sticky: true, id: "native-err" });
 }
 $("#b-native").onclick = async () => {
   const st = await fetch("/native/status").then((r) => r.json()).catch(() => null);
-  if (!st) return notice("Sin respuesta del sidecar", "No pude consultar el estado de la captura nativa.", "error");
+  if (!st) return notice("No answer from the sidecar", "Could not read the native capture status.", "error");
   if (!st.available) {
-    return notice("El helper nativo no está compilado", "Compílalo una vez y vuelve a intentarlo.", "warn",
-      { sticky: true, steps: ["Abre una terminal en la carpeta del plugin.", "cd helper && swift build -c release", "Vuelve a pulsar Sistema."] });
+    return notice("The native helper is not built", "Build it once and try again.", "warn",
+      { sticky: true, steps: ["Open a terminal in the plugin folder.", "cd helper && swift build -c release", "Vuelve a pulsar System."] });
   }
   if (st.running) { await post("/native/stop", {}); return; }
   const r = await post("/native/start", { fps: 1 });
-  if (!r.ok) notice("No se pudo iniciar la captura nativa", (await r.json().catch(() => ({}))).error || `HTTP ${r.status}`, "error", { sticky: true });
-  else notice("Captura nativa activa", "Audio del sistema y micro, sin selector. Cubre Zoom y Teams de escritorio.");
+  if (!r.ok) notice("Could not start the capture nativa", (await r.json().catch(() => ({}))).error || `HTTP ${r.status}`, "error", { sticky: true });
+  else notice("Native capture activa", "System audio and microphone, no picker. Covers desktop Zoom and Teams.");
 };
 
 speechSynthesis.getVoices();

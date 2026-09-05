@@ -59,7 +59,7 @@ export class Brain {
 
   /** New conversation: new job context, or the candidate pressed "nueva ronda". */
   reset() { this.kill(); this.turns = 0; this.lastError = ""; }
-  kill() { try { this.proc?.kill("SIGTERM"); } catch {} this.proc = null; this.buf = ""; this.failTurn("sesión reiniciada"); }
+  kill() { try { this.proc?.kill("SIGTERM"); } catch {} this.proc = null; this.buf = ""; this.failTurn("session restarted"); }
   private failTurn(why: string) {
     if (!this.turn) return;
     clearTimeout(this.turn.timer);
@@ -119,7 +119,7 @@ ${jd}`;
     proc.stdout!.on("data", (d: string) => this.onStdout(d));
     proc.on("exit", (code) => {
       this.proc = null;
-      if (this.turn) { this.lastError = `el proceso murió (código ${code})`; this.failTurn(this.lastError); }
+      if (this.turn) { this.lastError = `the process died (code ${code})`; this.failTurn(this.lastError); }
     });
     proc.on("error", (e) => { this.lastError = e.message; this.proc = null; this.failTurn(e.message); });
     return proc;
@@ -170,14 +170,14 @@ ${jd}`;
 
   async ask(input: { turns: Turn[]; mode: Mode; effort: Effort; imagePath?: string }, handlers: StreamHandlers = {}): Promise<Answer> {
     if (input.effort === "deep") return this.askOneShot(input, handlers);
-    if (this.turn) throw new Error("ya hay un turno en vuelo");
+    if (this.turn) throw new Error("a turn is already in flight");
     if (!this.proc) this.proc = this.spawnProc();
     const proc = this.proc;
     const payload = { type: "user", message: { role: "user", content: [{ type: "text", text: this.userMessage(input) }] } };
     return new Promise<Answer>((resolve, reject) => {
       this.turn = {
         resolve, reject, handlers, started: Date.now(), firstToken: 0, text: "", cueDone: false,
-        timer: setTimeout(() => { this.lastError = "tiempo agotado"; this.kill(); }, TIMEOUT_MS.quick),
+        timer: setTimeout(() => { this.lastError = "timed out"; this.kill(); }, TIMEOUT_MS.quick),
       };
       try { proc.stdin!.write(JSON.stringify(payload) + "\n"); }
       catch (e) { this.failTurn((e as Error).message); }
@@ -198,7 +198,7 @@ ${jd}`;
         "--exclude-dynamic-system-prompt-sections", "--allowedTools", "Read",
         "--system-prompt", this.systemPrompt(),
       ], { env, stdio: ["pipe", "pipe", "ignore"] });
-      const timer = setTimeout(() => { proc.kill("SIGTERM"); reject(new Error("tiempo agotado (deep)")); }, TIMEOUT_MS.deep);
+      const timer = setTimeout(() => { proc.kill("SIGTERM"); reject(new Error("timed out (deep)")); }, TIMEOUT_MS.deep);
       proc.stdout!.setEncoding("utf8");
       proc.stdout!.on("data", (d: string) => {
         buf += d; let nl: number;
@@ -221,7 +221,7 @@ ${jd}`;
       proc.on("close", () => {
         clearTimeout(timer);
         if (!cueDone) handlers.onCueDone?.(text.split("\n")[0].trim());
-        if (!text.trim()) return reject(new Error("respuesta vacía"));
+        if (!text.trim()) return reject(new Error("empty response"));
         resolve({ ...parseAnswer(text), model: MODEL.deep, firstTokenMs: firstToken, totalMs: Date.now() - started });
       });
       proc.on("error", (e) => { clearTimeout(timer); reject(e); });

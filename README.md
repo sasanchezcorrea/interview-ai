@@ -18,7 +18,7 @@ bash server/stop.sh           # stop sidecar + whisper-server
 Or, inside Claude Code: `/interview-ai:prep <job description>` then `/interview-ai:live`.
 
 1. Put your headphones on.
-2. Run the call in a Chrome tab (Meet, Teams web, Zoom web). In the panel press **Capturar llamada**, pick that tab, tick **Compartir audio de la pestaña**. Press **Micro** so your own answers become context.
+2. Run the call in a Chrome tab (Meet, Teams web, Zoom web). In the panel press **Tab**, pick that tab, tick **Also share tab audio**. Press **Micro** so your own answers become context.
 3. Every interviewer question triggers a cue (≤25 words), talking points and, when a coding task is visible, a full solution. **Responder ahora** (⌥↵) forces one, **Resolver lo que se ve** (⌥S) attaches the screen, **Deep** switches to Opus, **Flotar** pops the answer card into an always-on-top window.
 
 Rehearse without a real call at `http://127.0.0.1:31338/mock`: a fake interviewer that speaks five questions (English and Spanish) and shows a coding exercise.
@@ -70,7 +70,7 @@ Env: `IAI_PORT` (31338), `IAI_WHISPER_PORT` (8178), `IAI_WHISPER_MODEL` (`~/.cac
 
 ## Known limits (v1)
 
-- **Two capture paths, and you must tick the audio box in either.** *Pestaña* asks Chrome for a browser surface (Meet, Teams web, Zoom web) — tick "Also share tab audio". *Pantalla + sistema* asks for a monitor with system audio (Chrome 141+ on macOS 14.2+, so desktop Zoom and Teams work too) — tick "Also share system audio". Share a surface without its audio and you get video with no transcript; the panel now refuses to show a green light in that case and tells you exactly what to re-pick.
+- **Two capture paths, and you must tick the audio box in either.** *Tab* asks Chrome for a browser surface (Meet, Teams web, Zoom web) — tick "Also share tab audio". *Screen + system* asks for a monitor with system audio (Chrome 141+ on macOS 14.2+, so desktop Zoom and Teams work too) — tick "Also share system audio". Share a surface without its audio and you get video with no transcript; the panel now refuses to show a green light in that case and tells you exactly what to re-pick.
 - A window share never carries audio. Pick a tab or a whole screen.
 - End of question → spoken cue measured at 7.5-10 s with Sonnet (silence 0.8 s + whisper ~0.3 s + `claude -p` 6-9 s, more when a screenshot is attached). The transcript appears in ~1 s, so you see the question while it thinks.
 - Whisper `small` mishears rare proper nouns; `IAI_WHISPER_SIZE=medium server/setup.sh` and `IAI_WHISPER_MODEL=~/.cache/whisper/ggml-medium.bin` trade speed for accuracy.
