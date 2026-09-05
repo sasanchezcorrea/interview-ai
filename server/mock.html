@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es"><head><meta charset="utf-8"><title>Entrevistador simulado · Interview AI mock</title>
+<html lang="en"><head><meta charset="utf-8"><title>Simulated interviewer · Interview AI mock</title>
 <style>
   body{margin:0;background:#f6f7fb;color:#1b1f2a;font:16px/1.5 -apple-system,BlinkMacSystemFont,Inter,sans-serif;padding:24px;max-width:1000px}
   h1{margin:0 0 6px}.hint{color:#5a6273;margin-bottom:18px}
@@ -13,11 +13,11 @@
 </style></head>
 <body>
 <h1>Mock interviewer</h1>
-<div class="hint">Página de prueba para Interview AI. Desde el panel pulsa <b>Capturar llamada</b>, elige <b>esta pestaña</b> y marca <b>Compartir audio de la pestaña</b>. Luego lanza una pregunta.</div>
+<div class="hint">Test page for Interview AI. In the panel press <b>Tab</b>, pick <b>this tab</b>, and tick <b>Also share tab audio</b>. Then fire a question.</div>
 <div class="row">
-  <label>Voz: <select id="voice"><option>Samantha</option><option>Daniel</option><option>Mónica</option><option>Jorge</option><option>Paulina</option></select></label>
-  <button id="all" class="primary">▶ Secuencia completa (pausa 14 s)</button>
-  <button id="toggle-problem">🧩 Mostrar / ocultar ejercicio de código</button>
+  <label>Voice: <select id="voice"><option>Samantha</option><option>Daniel</option><option>Mónica</option><option>Jorge</option><option>Paulina</option></select></label>
+  <button id="all" class="primary">▶ Full sequence (14 s gaps)</button>
+  <button id="toggle-problem">🧩 Show / hide the coding exercise</button>
 </div>
 <div class="row" id="qs"></div>
 <div id="now">—</div>
@@ -33,6 +33,8 @@ Output: [[1,5]]</pre>
   <p>Discuss time and space complexity. Python preferred.</p>
 </section>
 <script>
+// The Spanish questions are deliberate: they prove the brain answers in the
+// interviewer's language, not the dossier's.
 const QS = [
   ["en", "Hi, thanks for joining. To start, tell me about yourself and your experience building AI agents in production."],
   ["en", "How would you design a multi-tenant RAG system where tenants must never see each other's data?"],

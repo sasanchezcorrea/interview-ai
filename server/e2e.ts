@@ -27,7 +27,7 @@ const CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome
 // "Interview AI": Chrome's auto-select matches a tab whose title is contained in the flag value
 // too, so the old title "Mock interviewer · Interview AI" made it pick the panel, which then
 // filmed itself — every screenshot showed the copilot instead of the exercise.
-const MOCK_TITLE = "Entrevistador simulado · Interview AI mock";
+const MOCK_TITLE = "Simulated interviewer · Interview AI mock";
 // Verbatim copies of mock.html's QS[0] and QS[1] — used for word-overlap scoring against the
 // whisper transcript, so the strings must match exactly what /mock/say actually speaks.
 const FAKE_MIC_TEXT = "I have three years of experience building multi tenant AI agent systems in production with Kubernetes, Python, and MCP tools.";

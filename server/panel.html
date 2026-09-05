@@ -154,9 +154,9 @@ body.pip #cue{font-size:1.35rem}
   <div class="readouts">
     <div class="tally" id="tally"><i></i><span class="lbl" id="tally-text" style="color:inherit">standby</span></div>
     <div class="readout"><span class="lbl">transcript</span><b id="r-stt">—</b></div>
-    <div class="readout"><span class="lbl">modelo</span><b id="r-model">—</b></div>
-    <div class="readout" id="ro-ft" style="min-width:64px"><span class="lbl">primer token</span><b id="r-ft">—</b></div>
-    <div class="readout" id="ro-lat" title="No latency measured yet."><span class="lbl">pregunta → voz</span><b id="r-lat">—</b></div>
+    <div class="readout"><span class="lbl">model</span><b id="r-model">—</b></div>
+    <div class="readout" id="ro-ft" style="min-width:64px"><span class="lbl">first token</span><b id="r-ft">—</b></div>
+    <div class="readout" id="ro-lat" title="No latency measured yet."><span class="lbl">question → voice</span><b id="r-lat">—</b></div>
   </div>
 </header>
 
@@ -317,7 +317,7 @@ function handle(ev) {
 function emptyLog() { $("#turns").innerHTML = '<p class="empty">No audio yet. Pick a source below.</p>'; }
 function brainInfo(b) {
   if (!b) return;
-  $("#brain-info").textContent = `dossier ${b.dossier ? "✓" : "✗"} · contexto ${b.jd ? "✓" : "✗"} · ${b.models.quick} / ${b.models.deep}`;
+  $("#brain-info").textContent = `dossier ${b.dossier ? "✓" : "✗"} · context ${b.jd ? "✓" : "✗"} · ${b.models.quick} / ${b.models.deep}`;
   $("#ctx-info").textContent = b.dossier ? "Dossier loaded" : "No dossier: run /interview-ai:prep";
 }
 
@@ -446,12 +446,12 @@ function showAnswer(a) {
   S.cue = null;
 }
 const dur = (v) => (v == null ? "—" : v >= 1000 ? (v / 1000).toFixed(1) + " s" : Math.round(v) + " ms");
-/** Pregunta → voz is the only latency the candidate feels; the four stages live in the tooltip. */
+/** Question → voice is the only latency the candidate feels; the four stages live in the tooltip. */
 function showLatency(ev) {
   const p50 = ev.p50 || {}, p95 = ev.p95 || {};
   if (p50.qToVoiceMs != null) $("#r-lat").textContent = (p50.qToVoiceMs / 1000).toFixed(1) + " s";
   if (p50.firstTokenMs != null) $("#r-ft").textContent = dur(p50.firstTokenMs);
-  const row = (n, s) => `${n} · stt ${dur(s.sttMs)} · primer token ${dur(s.firstTokenMs)} · respuesta ${dur(s.totalMs)} · pregunta→voz ${dur(s.qToVoiceMs)}`;
+  const row = (n, s) => `${n} · stt ${dur(s.sttMs)} · first token ${dur(s.firstTokenMs)} · answer ${dur(s.totalMs)} · question→voice ${dur(s.qToVoiceMs)}`;
   const tip = `${row("p50", p50)}\n${row("p95", p95)}`;
   $("#ro-lat").title = tip; $("#ro-ft").title = tip;
 }
