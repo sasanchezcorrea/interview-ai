@@ -79,7 +79,9 @@ test("isHallucination drops whisper boilerplate", () => {
 
 describe("trigramSimilarity", () => {
   test("catches our own cue coming back garbled by whisper", () => {
-    // Real pair from a live session: the copilot said the first, the microphone heard the second.
+    // Real pair from a live session, with the employer renamed: the copilot said the first and
+    // the microphone heard the second. The failure is a compound name split into two words,
+    // which is exactly what word-overlap matching misses and trigrams catch.
     const said = "I design tenant isolation as a single shared guard at Riverbend, never per caller.";
     const heard = "I'm currently at river bend, tenant isolation as a single shared guard";
     expect(trigramSimilarity(said, heard)).toBeGreaterThan(0.3);
