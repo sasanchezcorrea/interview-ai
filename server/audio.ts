@@ -3,7 +3,7 @@
 
 export const SAMPLE_RATE = 16000;
 
-export interface Segment { pcm: Int16Array; durationMs: number }
+export interface Segment { pcm: Int16Array; durationMs: number; peak: number }
 
 export interface SegmenterOptions {
   silenceMs: number;      // trailing silence that closes a segment
@@ -30,6 +30,7 @@ export class Segmenter {
   private speechMs = 0;
   private silenceMs = 0;
   private voicedMs = 0; // frames above threshold only (preroll and pauses excluded)
+  private peak = 0;     // loudest frame in this segment, so the consumer can judge the signal
   private inSpeech = false;
   private noise = 0.003; // EMA of quiet-frame RMS
 
@@ -47,7 +48,7 @@ export class Segmenter {
     if (this.inSpeech) {
       this.chunks.push(frame);
       this.speechMs += ms;
-      if (voiced) { this.silenceMs = 0; this.voicedMs += ms; } else this.silenceMs += ms;
+      if (voiced) { this.silenceMs = 0; this.voicedMs += ms; this.peak = Math.max(this.peak, rms); } else this.silenceMs += ms;
       if (this.silenceMs >= this.opt.silenceMs || this.speechMs >= this.opt.maxMs) this.flush();
       return;
     }
@@ -56,6 +57,7 @@ export class Segmenter {
       this.chunks = [...this.preroll, frame];
       this.speechMs = this.prerollMs + ms;
       this.voicedMs = ms;
+      this.peak = rms;
       this.silenceMs = 0;
       this.preroll = []; this.prerollMs = 0;
       return;
@@ -76,7 +78,8 @@ export class Segmenter {
     let off = 0;
     for (const c of this.chunks) { pcm.set(c, off); off += c.length; }
     this.chunks = []; this.speechMs = 0; this.silenceMs = 0; this.voicedMs = 0; this.inSpeech = false;
-    if (voicedMs >= this.opt.minSpeechMs) this.onSegment({ pcm, durationMs: (total / SAMPLE_RATE) * 1000 });
+    const peak = this.peak; this.peak = 0;
+    if (voicedMs >= this.opt.minSpeechMs) this.onSegment({ pcm, durationMs: (total / SAMPLE_RATE) * 1000, peak });
   }
 }
 
@@ -162,4 +165,20 @@ export function domainPrompt(jd: string): string {
     jdPart = next;
   }
   return jdPart ? `${jdPart}, ${BASE_VOCAB}` : BASE_VOCAB;
+}
+
+/** Character-trigram Jaccard similarity, 0..1. Survives the word errors whisper makes on audio it
+ *  half-heard, which is exactly the shape our own voice takes when it bleeds back in. */
+export function trigramSimilarity(a: string, b: string): number {
+  const grams = (t: string) => {
+    const c = ` ${t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `;
+    const out = new Set<string>();
+    for (let i = 0; i + 3 <= c.length; i++) out.add(c.slice(i, i + 3));
+    return out;
+  };
+  const A = grams(a), B = grams(b);
+  if (A.size < 3 || B.size < 3) return 0;
+  let inter = 0;
+  for (const g of A) if (B.has(g)) inter++;
+  return inter / (A.size + B.size - inter);
 }

@@ -14,7 +14,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import type { ServerWebSocket, Subprocess } from "bun";
-import { Segmenter, wavFromPcm16, looksLikeQuestion, isHallucination, rmsOf, domainPrompt, type Segment } from "./audio";
+import { Segmenter, wavFromPcm16, looksLikeQuestion, isHallucination, rmsOf, domainPrompt, trigramSimilarity, type Segment } from "./audio";
 import { Brain, type Effort, type Mode, type Turn } from "./brain";
 import { handleVoiceRequest } from "./voice";
 import { startNative, stopNative, nativeStatus, listSources, type AppStatus } from "./native";
@@ -51,6 +51,12 @@ const meters: Record<Ch, Meter> = {
   me: { frames: 0, bytes: 0, rms: 0, peak: 0, lastAt: 0, firstAt: 0, dropped: 0 },
 };
 const discarded: Record<Ch, number> = { them: 0, me: 0 };
+/** Below this a segment is room tone, not speech — and whisper will happily write sentences from
+ *  room tone. Measured here: real speech peaks around 0.085, an empty room 0.001-0.004. */
+const MIN_SEGMENT_PEAK = Number(process.env.IAI_MIN_PEAK ?? 0.02);
+/** Word overlap of a clean repeat runs high; a garbled one shows up in the trigram score, which
+ *  is lower by nature. One threshold for both, set where the garbled case still trips it. */
+const ECHO_THRESHOLD = Number(process.env.IAI_ECHO_THRESHOLD ?? 0.45);
 /** What has recently gone out of the speakers or come in on the other channel. With speakers on,
  *  ScreenCaptureKit taps the system output, so the copilot's OWN spoken cue arrives back on the
  *  interviewer channel — and the copilot would then answer itself. This is the guard. */
@@ -72,7 +78,10 @@ function echoOverlap(heard: string, ch: Ch): { frac: number; src: string } {
     if (ch === "me" && s.src === "me") continue;
     const words = new Set(norm(s.text));
     if (!words.size) continue;
-    const frac = hw.filter((w) => words.has(w)).length / hw.length;
+    const wordFrac = hw.filter((w) => words.has(w)).length / hw.length;
+    // Take whichever notices it: word overlap catches a clean repeat, trigrams catch the garbled
+    // version whisper produces from audio it half-heard.
+    const frac = Math.max(wordFrac, trigramSimilarity(heard, s.text));
     if (frac > best.frac) best = { frac, src: s.src === "cue" ? "our own voice" : "the other channel" };
   }
   return best;
@@ -167,6 +176,13 @@ async function transcribe(pcm: Int16Array): Promise<{ text: string; ms: number }
 // whisper-server handles one request at a time; serialize so segments never interleave.
 let sttQueue: Promise<void> = Promise.resolve();
 function onSegment(ch: Ch, seg: Segment, endedAt: number) {
+  if (seg.peak < MIN_SEGMENT_PEAK) {
+    // Cheaper than transcribing it and throwing the words away, and it keeps the log honest about
+    // why nothing appeared.
+    discarded[ch]++;
+    log(`too quiet (${ch}): peak ${seg.peak.toFixed(4)} < ${MIN_SEGMENT_PEAK}`);
+    return;
+  }
   sttQueue = sttQueue.then(async () => {
     try {
       const { text, ms } = await transcribe(seg.pcm);
@@ -175,9 +191,9 @@ function onSegment(ch: Ch, seg: Segment, endedAt: number) {
       // INTERVIEWER channel, which is the one that triggers answers. Left unguarded the copilot
       // answers itself.
       const echo = echoOverlap(text, ch);
-      if (echo.frac >= 0.66) {
+      if (echo.frac >= ECHO_THRESHOLD) {
         discarded[ch]++;
-        log(`eco discarded (${ch}): "${text}" — ${Math.round(echo.frac * 100)}% matches ${echo.src}`);
+        log(`echo discarded (${ch}): "${text}" — ${Math.round(echo.frac * 100)}% matches ${echo.src}`);
         broadcast({ type: "discard", ch, text, reason: "echo" });
         return;
       }

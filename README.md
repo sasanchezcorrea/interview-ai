@@ -68,6 +68,27 @@ asked for, so screenshot-dependent rows there test the harness more than the pro
 
 Env: `IAI_PORT` (31338), `IAI_WHISPER_PORT` (8178), `IAI_WHISPER_MODEL` (`~/.cache/whisper/ggml-small.bin`), `IAI_WHISPER_PROMPT` (domain vocabulary hint), `IAI_PULSE_URL`.
 
+## Two gates keep the interviewer channel honest
+
+Whisper writes confident sentences from room tone, and with speakers on, the copilot's own spoken
+cue comes back in on the interviewer channel — the one that triggers answers. Left alone the thing
+answers itself. Two gates, both tuned on measurements from this machine:
+
+- **Loudness.** A segment whose loudest frame is under `0.02` never reaches whisper at all. Real
+  speech peaks around `0.085` here; an empty room sits at `0.001-0.004`. Override with
+  `IAI_MIN_PEAK`.
+- **Fuzzy echo.** Every cue we speak and every turn on the other channel is remembered for 25s. A
+  new turn scoring above `0.45` against one of them — the higher of word overlap and character
+  trigram similarity — is dropped. Trigrams are what catch our own line coming back garbled, which
+  is how it usually returns. Override with `IAI_ECHO_THRESHOLD`.
+
+The guard is asymmetric on purpose: system audio is the clean source of the interviewer's voice and
+the microphone is where it arrives second-hand, so the interviewer channel is only ever checked
+against cues we spoke, never against the mic. Checking both ways killed the real question whenever
+its echo landed first.
+
+Headphones still help, and remove the problem entirely.
+
 ## Known limits (v1)
 
 - **Two capture paths, and you must tick the audio box in either.** *Tab* asks Chrome for a browser surface (Meet, Teams web, Zoom web) — tick "Also share tab audio". *Screen + system* asks for a monitor with system audio (Chrome 141+ on macOS 14.2+, so desktop Zoom and Teams work too) — tick "Also share system audio". Share a surface without its audio and you get video with no transcript; the panel now refuses to show a green light in that case and tells you exactly what to re-pick.
