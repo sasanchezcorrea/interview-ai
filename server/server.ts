@@ -28,7 +28,13 @@ const VAD_MODEL = process.env.IAI_VAD_MODEL ?? join(homedir(), ".cache/whisper/g
 const VAD_URL = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin";
 const PULSE_NOTIFY = process.env.IAI_PULSE_URL ?? "http://localhost:31337/notify";
 const SHOT_DIR = "/tmp/interview-ai";
-const USER_DIR = join(homedir(), ".claude/LIFEOS/USER/INTERVIEW_AI");
+// Where the candidate's dossier and job context live. Portable by default so the plugin works
+// on a plain Claude Code install; IAI_USER_DIR overrides it, and an existing LifeOS folder is
+// adopted so upgrading from the pre-marketplace layout does not silently lose the dossier.
+const LEGACY_USER_DIR = join(homedir(), ".claude/LIFEOS/USER/INTERVIEW_AI");
+const USER_DIR = process.env.IAI_USER_DIR
+  ?? (existsSync(LEGACY_USER_DIR) ? LEGACY_USER_DIR : join(homedir(), ".interview-ai"));
+mkdirSync(USER_DIR, { recursive: true });
 mkdirSync(SHOT_DIR, { recursive: true });
 mkdirSync(USER_DIR, { recursive: true });
 
@@ -292,7 +298,7 @@ const jdText = () => { const p = join(USER_DIR, "jd.md"); return existsSync(p) ?
 const state = () => ({ transcript: transcript.slice(-60), settings, latestShot, brain: brain.info(), inFlight, whisperPort: WHISPER_PORT, jd: jdText(), meters, discarded, latency: latency(), native: nativeStatus(), frontmostApp });
 setInterval(() => {
   if (!clients.size) return;
-  broadcast({ type: "meters", meters, discarded });
+  broadcast({ type: "meters", meters, discarded, used: brain.info().used });
   const l = latency();
   broadcast({ type: "latency", p50: l.p50, p95: l.p95 });
 }, 500);

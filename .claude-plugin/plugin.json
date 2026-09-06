@@ -1,9 +1,17 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "interview-ai",
-  "version": "0.1.0",
-  "description": "Interview AI: live interview and meeting copilot. Transcribes the call (Chrome tab + mic), reads the screen, and suggests answers in real time via your Claude subscription.",
+  "version": "0.2.0",
+  "description": "Interview AI: a declared real-time copilot for live interviews and meetings. Captures system audio, microphone and screen natively on macOS, transcribes locally with whisper.cpp, and answers on your own panel using your Claude subscription.",
   "author": {
     "name": "Santiago Sanchez Correa"
-  }
+  },
+  "homepage": "https://github.com/santiagosanchezcorrea/interview-ai",
+  "keywords": [
+    "interview",
+    "copilot",
+    "transcription",
+    "whisper",
+    "real-time"
+  ]
 }

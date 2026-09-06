@@ -80,6 +80,10 @@ main{flex:1; display:grid; grid-template-columns:minmax(260px,30%) 1fr; min-heig
 .log .empty{color:var(--ink-3); font-size:var(--step-0); padding:6px 0}
 
 .stage{display:flex; flex-direction:column; min-height:0; overflow-y:auto; padding:26px 30px 30px; gap:22px}
+/* Flex items shrink by default, and a child with overflow:hidden has no min-height floor to
+   stop it — so once the answer got long the code slab was squeezed to a sliver instead of
+   the column scrolling. Every section keeps its natural height; the stage does the scrolling. */
+.stage > *{flex:0 0 auto}
 .cue{border-top:2px solid var(--rail-hi); padding-top:14px; transition:border-color .2s}
 .cue.thinking{border-top-color:var(--tally)}
 .cue .meta{display:flex; justify-content:space-between; align-items:baseline; gap:14px; margin-bottom:10px}
@@ -99,7 +103,13 @@ main{flex:1; display:grid; grid-template-columns:minmax(260px,30%) 1fr; min-heig
 
 .slab{border:1px solid var(--rail); border-radius:3px; background:var(--desk); overflow:hidden}
 .slab>header{background:var(--deck); padding:7px 13px; border-bottom:1px solid var(--rail); display:flex; justify-content:space-between; align-items:center; gap:12px}
-.slab pre{margin:0; padding:15px; overflow:auto; max-height:44vh; background:#100E0B; font-family:"IBM Plex Mono",monospace; font-size:var(--step--1); line-height:1.62; color:var(--ink)}
+/* This code often gets RETYPED BY HAND during a call, so it is sized to be read from a
+   normal sitting distance rather than to be compact: 15px with open leading and a box tall
+   enough for a whole function. Long lines WRAP instead of scrolling sideways, because code
+   hidden off to the right is code the candidate will not notice is missing. */
+.slab pre{margin:0; padding:15px; overflow:auto; max-height:72vh; background:#100E0B;
+  font-family:"IBM Plex Mono",monospace; font-size:.9375rem; line-height:1.7; color:var(--ink);
+  white-space:pre-wrap; overflow-wrap:break-word; tab-size:2}
 #monitor{max-width:300px}
 #monitor img{display:block; width:100%; border:1px solid var(--rail); border-radius:2px; opacity:.82; transition:opacity .15s}
 #monitor:hover img{opacity:1}
@@ -155,6 +165,7 @@ body.pip #cue{font-size:1.35rem}
     <div class="tally" id="tally"><i></i><span class="lbl" id="tally-text" style="color:inherit">standby</span></div>
     <div class="readout"><span class="lbl">transcript</span><b id="r-stt">—</b></div>
     <div class="readout"><span class="lbl">model</span><b id="r-model">—</b></div>
+      <div class="readout" id="ro-tok" title="Tokens spent this session: output, then input including cache reads."><span class="lbl">tokens</span><b id="r-tok">—</b></div>
     <div class="readout" id="ro-ft" style="min-width:64px"><span class="lbl">first token</span><b id="r-ft">—</b></div>
     <div class="readout" id="ro-lat" title="No latency measured yet."><span class="lbl">question → voice</span><b id="r-lat">—</b></div>
   </div>
@@ -245,7 +256,7 @@ body.pip #cue{font-size:1.35rem}
 // otherwise every cue token would throw while the panel floats.
 const $ = (s) => document.querySelector(s) || (S.pip ? S.pip.document.querySelector(s) : null);
 const S = { pipes: {}, streams: {}, audioWs: null, queue: [], shotTimer: null, lastThumb: null,
-            pip: null, lastCode: "", meterPrev: {}, noAudioSince: {}, shotWarned: false,
+            pip: null, lastCode: "", meterPrev: {}, shotWarned: false,
             cue: null, ttsChain: Promise.resolve() };
 const CH = { them: 0, me: 1 };
 
@@ -284,14 +295,14 @@ function handle(ev) {
     case "state":
       $("#turns").innerHTML = ""; (ev.transcript || []).forEach(addTurn); if (!(ev.transcript || []).length) emptyLog();
       $("#t-auto").checked = ev.settings.auto; $("#t-deep").checked = ev.settings.effort === "deep";
-      $("#jd").value = ev.jd || ""; brainInfo(ev.brain);
+      $("#jd").value = ev.jd || ""; brainInfo(ev.brain); paintUsed(ev.brain?.used);
       if (ev.latestShot) showShot(`/shots/${ev.latestShot.path.split("/").pop()}`, ev.latestShot.t);
       setTally("idle", "standby");
       if (ev.native) paintNative(ev.native);
       if (ev.frontmostApp) { $("#appbar").hidden = false; $("#appbar").textContent = `Frontmost app · ${ev.frontmostApp.app}`; }
       fetch("/health").then((r) => r.json()).then((h) => { $("#r-stt").textContent = h.whisper ? "whisper" : "sin whisper"; }).catch(() => {});
       break;
-    case "meters": paintMeters(ev.meters); break;
+    case "meters": paintMeters(ev.meters); paintUsed(ev.used); break;
     case "transcript": addTurn(ev); $("#r-stt").textContent = ev.sttMs + " ms"; break;
     case "thinking":
       S.cue = null;                                     // a new round: nothing streamed or spoken yet
@@ -322,6 +333,17 @@ function brainInfo(b) {
 }
 
 /* ── channel strips: level, state, and the truth about audio ─────────── */
+const kfmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1000 ? Math.round(n / 1000) + "k" : String(n);
+function paintUsed(u) {
+  if (!u) return;
+  // Output tokens are what the model actually wrote; input is dominated by cache reads of the
+  // dossier, so the two are shown apart rather than as one meaningless total.
+  $("#r-tok").textContent = `${kfmt(u.output)} out / ${kfmt(u.input + u.cacheRead + u.cacheWrite)} in`;
+  const ro = $("#ro-tok");
+  if (ro) ro.title = `This session: ${u.output.toLocaleString()} output, ${u.input.toLocaleString()} input, `
+    + `${u.cacheRead.toLocaleString()} cache read, ${u.cacheWrite.toLocaleString()} cache write, over ${u.calls} calls`
+    + (u.costUsd ? ` \u2014 $${u.costUsd.toFixed(3)} at API rates (your subscription covers it)` : "");
+}
 function paintMeters(m) {
   for (const ch of ["them", "me"]) {
     const strip = $("#strip-" + ch), st = strip.querySelector(".stat");
@@ -332,24 +354,19 @@ function paintMeters(m) {
     if (!armed) { strip.dataset.state = "off"; st.textContent = ch === "them" ? "no source" : "mic off"; setLevel(strip, 0, 0); continue; }
     const fresh = Date.now() - cur.lastAt < 1500;
     if (!fresh) { strip.dataset.state = "armed"; st.textContent = "no frames"; setLevel(strip, 0, 0); continue; }
-    // Frames arriving but flat: a real, common failure (surface shared without its audio).
-    const silent = cur.peak < 0.004;
-    strip.dataset.state = silent ? "mute" : "live";
-    st.textContent = silent ? "silent" : `${fps}/s · ${(20 * Math.log10(Math.max(cur.rms, 1e-4))).toFixed(0)} dB`;
+    // Frames are arriving: that is the whole message, and the moving meter carries it.
+    // No popup, no scolding word for a quiet moment — a level bar at the floor already says
+    // "nothing is coming through" and, unlike a card, it says so continuously and stops
+    // saying it the instant sound returns.
+    strip.dataset.state = "live";
+    st.textContent = `${fps}/s \u00b7 ${(20 * Math.log10(Math.max(cur.rms, 1e-4))).toFixed(0)} dB`;
     setLevel(strip, cur.rms, cur.peak);
-    if (silent) { S.noAudioSince[ch] = S.noAudioSince[ch] || Date.now(); if (Date.now() - S.noAudioSince[ch] > 8000) warnSilent(ch); }
-    else S.noAudioSince[ch] = 0;
   }
 }
 function setLevel(strip, rms, peak) {
   const scale = (v) => Math.max(0, Math.min(1, (20 * Math.log10(Math.max(v, 1e-4)) + 60) / 60));
   strip.querySelector(".fill").style.width = (scale(rms) * 100).toFixed(1) + "%";
   strip.querySelector(".pk").style.left = (scale(peak) * 100).toFixed(1) + "%";
-}
-function warnSilent(ch) {
-  notice("Audio is arriving, but it is silent",
-    ch === "them" ? "The source delivers an audio track of pure zeros. Almost always the audio checkbox was left unticked." : "The microphone delivers silence: check the system input device.",
-    "warn", { sticky: true, id: "silent-" + ch, steps: ch === "them" ? ["Stop the capture and pick the source again.", "Tick \u00abAlso share tab audio\u00bb or \u00abAlso share system audio\u00bb before you accept."] : null });
 }
 
 /* ── transcript ──────────────────────────────────────────────────────── */
@@ -530,7 +547,7 @@ function closePipe(ch) {
 function stopSource(ch) {
   closePipe(ch);
   S.streams[ch]?.getTracks().forEach((t) => t.stop());
-  delete S.streams[ch]; delete S.noAudioSince[ch];
+  delete S.streams[ch];
   if (ch === "them") { setSourceState("b-tab", "off"); setSourceState("b-screen", "off"); }
   else setSourceState("b-mic", "off");
 }
@@ -580,7 +597,7 @@ function noAudioCard(kind, surface) {
     "error", { sticky: true, id: "no-audio",
       steps: kind === "tab"
         ? ["Press Tab again.", "Pick the call\u2019s tab under \u00abChrome Tab\u00bb.", "Tick \u00abAlso share tab audio\u00bb before you accept."]
-        : ["Vuelve a pulsar Screen + system.", "Pick \u00abEntire Screen\u00bb.", "Tick \u00abAlso share system audio\u00bb before you accept."],
+        : ["Press Screen + system again.", "Pick \u00abEntire Screen\u00bb.", "Tick \u00abAlso share system audio\u00bb before you accept."],
       action: { label: "Retry", run: () => capture(kind) } });
 }
 $("#b-tab").onclick = () => capture("tab");
@@ -715,6 +732,7 @@ function paintNative(n) {
   b.dataset.state = n.running ? (n.counts && n.counts.audio > 0 ? "live" : "armed") : "off";
   b.textContent = ""; b.append(Object.assign(document.createElement("span"), { className: "led" }),
                               document.createTextNode(n.running ? "System on" : "System"));
+  S.nativeOn = n.running;
   S.streams.them = n.running ? (S.streams.them || { getTracks: () => [] }) : S.streams.them;
   S.streams.me = n.running ? (S.streams.me || { getTracks: () => [] }) : S.streams.me;
   if (n.lastError) notice("Native capture", n.lastError, "error", { sticky: true, id: "native-err" });
@@ -724,7 +742,7 @@ $("#b-native").onclick = async () => {
   if (!st) return notice("No answer from the sidecar", "Could not read the native capture status.", "error");
   if (!st.available) {
     return notice("The native helper is not built", "Build it once and try again.", "warn",
-      { sticky: true, steps: ["Open a terminal in the plugin folder.", "cd helper && swift build -c release", "Vuelve a pulsar System."] });
+      { sticky: true, steps: ["Open a terminal in the plugin folder.", "cd helper && swift build -c release", "Press System again."] });
   }
   if (st.running) { await post("/native/stop", {}); return; }
   const r = await post("/native/start", { fps: 1 });

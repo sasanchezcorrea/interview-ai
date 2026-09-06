@@ -8,7 +8,7 @@ DEST="$HOME/.cache/whisper/ggml-$SIZE.bin"
 command -v brew >/dev/null || { echo "ERROR: Homebrew is required (https://brew.sh)"; exit 1; }
 command -v whisper-server >/dev/null || brew install whisper-cpp
 command -v ffmpeg >/dev/null || brew install ffmpeg
-mkdir -p "$HOME/.cache/whisper" /tmp/interview-ai "$HOME/.claude/LIFEOS/USER/INTERVIEW_AI"
+mkdir -p "$HOME/.cache/whisper" /tmp/interview-ai "${IAI_USER_DIR:-$HOME/.interview-ai}"
 if [ ! -s "$DEST" ]; then
   echo "downloading ggml-$SIZE.bin…"
   curl -L --fail --progress-bar -o "$DEST.part" "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$SIZE.bin"

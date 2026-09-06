@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "interview-ai",
+  "description": "A declared, real-time copilot for live interviews and technical meetings.",
+  "owner": {
+    "name": "Santiago Sanchez Correa"
+  },
+  "plugins": [
+    {
+      "name": "interview-ai",
+      "description": "Live interview copilot: transcribes the call, reads the shared screen, and puts the line to say next on your own panel. Output goes only to the candidate — never to the shared screen.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

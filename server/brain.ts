@@ -47,14 +47,31 @@ export class Brain {
   private turns = 0;
   private lastError = "";
 
+  /** Session totals, so the candidate can see what a call actually costs. Survives brain.reset():
+   *  what was spent was spent, and a fresh conversation does not refund it. */
+  private used = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: 0, calls: 0 };
+
   constructor(private paths: { dossierPath: string; jdPath: string }) {}
 
   info() {
     return {
       alive: !!this.proc && !this.proc.killed, turns: this.turns, models: MODEL,
       dossier: existsSync(this.paths.dossierPath), jd: existsSync(this.paths.jdPath),
+      used: { ...this.used },
       lastError: this.lastError || undefined,
     };
+  }
+
+  /** The `result` event closes a turn and carries its token counts. Cache reads are billed
+   *  differently from fresh input, so they are kept apart instead of summed into one number. */
+  private recordUsage(ev: any): void {
+    const u = ev?.usage; if (!u) return;
+    this.used.input += u.input_tokens ?? 0;
+    this.used.output += u.output_tokens ?? 0;
+    this.used.cacheRead += u.cache_read_input_tokens ?? 0;
+    this.used.cacheWrite += u.cache_creation_input_tokens ?? 0;
+    this.used.costUsd += ev.total_cost_usd ?? 0;
+    this.used.calls++;
   }
 
   /** New conversation: new job context, or the candidate pressed "nueva ronda". */
@@ -80,8 +97,8 @@ Line 1: the cue. What to say RIGHT NOW: ONE sentence, 12-22 words, first person,
         spoken aloud as it streams, so front-load the substance: the first six words must already
         carry the answer, because the candidate starts talking before the line finishes. Never a
         list, never two sentences. Detail belongs in the "- " lines, not here.
-Then:   0-5 lines each starting with "- ", the facts to expand with (numbers, project names from
-        the dossier). Same language as the cue.
+Then:   0-5 lines each starting with "- ", the substance to expand with. ALWAYS in the same
+        language as line 1, even when the dossier is written in another language.
 Then:   only when a coding task is asked or visible, a fenced code block with its language tag,
         containing complete runnable code with a one-line comment naming the approach and complexity.
 
@@ -91,6 +108,21 @@ RULES
   and a missing or unreadable screenshot is itself worth saying out loud.
 - Never invent experience missing from the dossier. If the candidate lacks it, the cue says so
   honestly and pivots to the closest real experience.
+- ANONYMISE the dossier. Never say an employer, product, client, repository, ticket, PR number or
+  internal codename out loud — the interviewer does not know them, and naming them sounds like
+  leaking. Describe the system by its SHAPE and SCALE instead: "a multi-tenant RAG platform",
+  "a production voice agent", "a 48-service internal platform". The engineering is the evidence;
+  the brand name is not, and often breaks a confidentiality expectation.
+- SENIOR DEPTH, not breadth. A list of technologies is a junior answer. Each "- " line carries one
+  of: the mechanism (how it actually works), the trade-off taken and what was given up, the failure
+  mode it prevents, or a measurable outcome. Prefer three lines that stand up to a follow-up over
+  five that only name things. Assume the very next question is "why?" and pre-answer it.
+- AGNOSTIC BY DEFAULT. Answer from general engineering principle, not from the candidate's
+  employer, its products, its stack choices or the way that one company happened to do it. The
+  answer must stand on its own for any team. Bring the candidate's own history in ONLY when the
+  interviewer explicitly asks for experience ("tell me about a time", "have you done X",
+  "walk me through a project"), and even then anonymised and as evidence for the principle you
+  already stated — never as the opening move, never as the reason something is true.
 - The candidate speaks the cue themselves. Never address the interviewer, never mention that a
   copilot exists.
 - One concrete example beats three adjectives.
@@ -162,6 +194,7 @@ ${jd}`;
     }
     if (ev.type === "result" || typeof ev.duration_api_ms === "number") {
       clearTimeout(t.timer);
+      this.recordUsage(ev);
       this.turn = null; this.turns++;
       if (!t.cueDone) t.handlers.onCueDone?.(t.text.split("\n")[0].trim());
       t.resolve({ ...parseAnswer(t.text), model: MODEL.quick, firstTokenMs: t.firstToken, totalMs: Date.now() - t.started });
@@ -206,6 +239,7 @@ ${jd}`;
           const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
           if (!line.trim()) continue;
           let ev: any; try { ev = JSON.parse(line); } catch { continue; }
+          if (ev.type === "result" || typeof ev.duration_api_ms === "number") this.recordUsage(ev);
           if (ev.type === "stream_event" && ev.event?.type === "content_block_delta") {
             const delta = ev.event.delta?.text ?? ""; if (!delta) continue;
             if (!firstToken) firstToken = Date.now() - started;
