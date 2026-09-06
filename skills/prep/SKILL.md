@@ -13,7 +13,12 @@ The live brain runs as `claude -p` without CLAUDE.md, memories or MCP, so everyt
 ## Inputs
 
 - The job description / role / company pasted by the user (ask for it if missing; a one-line role is enough to start).
-- `~/.claude/LIFEOS/USER/PRINCIPAL/PRINCIPAL_IDENTITY.md`, `RESUME.md` (if present), `~/.claude/LIFEOS/USER/PROJECTS.md`, `~/.claude/LIFEOS/USER/TELOS/TELOS.md`.
+- Whatever the user actually has. Ask for a CV or LinkedIn export if nothing is on disk — a
+  dossier invented from nothing is worse than none, because the copilot will speak it aloud.
+- If the user runs LifeOS, these are the richest sources and should be read first (skip any
+  that are missing, and never treat their absence as an error):
+  `~/.claude/LIFEOS/USER/PRINCIPAL/PRINCIPAL_IDENTITY.md`, `RESUME.md`,
+  `~/.claude/LIFEOS/USER/PROJECTS.md`, `~/.claude/LIFEOS/USER/TELOS/TELOS.md`.
 - Engram: run `mem_search` (all_projects: true, match_mode: any) with 3-5 keyword sets taken from the job description (stack, domain, seniority signals, e.g. "multi-agent orchestration", "kubernetes production", "RAG vectorization", "MCP server"). Pull the top decisions, bugs fixed and architectures: those are the concrete stories.
 
 ## Steps

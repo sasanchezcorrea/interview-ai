@@ -297,7 +297,9 @@ if (import.meta.main) {
   const q = a[a.indexOf("--test") + 1];
   if (a.indexOf("--test") < 0 || !q) { console.error('usage: bun brain.ts --test "<question>" [--deep] [--image <jpg>]'); process.exit(1); }
   const img = a.indexOf("--image") >= 0 ? a[a.indexOf("--image") + 1] : undefined;
-  const dir = join(homedir(), ".claude/LIFEOS/USER/INTERVIEW_AI");
+  // Same resolution order as server.ts, or `--test` reads a different dossier than the app.
+  const legacy = join(homedir(), ".claude/LIFEOS/USER/INTERVIEW_AI");
+  const dir = process.env.IAI_USER_DIR ?? (existsSync(legacy) ? legacy : join(homedir(), ".interview-ai"));
   const brain = new Brain({ dossierPath: join(dir, "dossier.md"), jdPath: join(dir, "jd.md") });
   const deep = a.includes("--deep");
   if (!deep) { brain.warm(); await Bun.sleep(2500); }   // mirror the server: process warm before the turn
