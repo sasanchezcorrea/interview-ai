@@ -12,16 +12,29 @@ candidate should say next — in their own panel and their own headphones. Every
 goes only to that panel; the candidate speaks and types themselves. It never writes into other
 apps and has no hiding features. Use it only where AI assistance is allowed or declared.
 
+## Resolving the plugin root
+
+Every path below is written against `$ROOT`. Resolve it FIRST, in one line, because the plugin
+runs both as an installed marketplace plugin and straight out of a skills directory, and only
+the first of those defines `CLAUDE_PLUGIN_ROOT`:
+
+```bash
+ROOT="${CLAUDE_PLUGIN_ROOT:-<this skill's base directory>/../..}"
+```
+
+Claude Code prints "Base directory for this skill" when it loads this file — that is the value to
+substitute. Confirm with `ls "$ROOT/server/start.sh"` before running anything.
+
 ## Steps
 
-1. **Dependencies.** Run `bash ${CLAUDE_PLUGIN_ROOT}/server/setup.sh`. It installs `whisper-cpp`
+1. **Dependencies.** Run `bash $ROOT/server/setup.sh`. It installs `whisper-cpp`
    and `ffmpeg` via Homebrew, downloads the model, and fetches the native capture helper
    (verifying its checksum). Idempotent — skip it if it has printed OK before.
 2. **Context check.** The brain answers from a dossier and a job context. If `"jd"` in
    `/health` is empty, tell the user to press **Context** in the panel and paste the posting or
    what the meeting is about; without it the answers are generic. `/interview-ai:prep` builds a
    fuller dossier. Do not block on either.
-3. **Start the sidecar**: `bash ${CLAUDE_PLUGIN_ROOT}/server/start.sh`. It runs the server in
+3. **Start the sidecar**: `bash $ROOT/server/start.sh`. It runs the server in
    its own session — a plain `nohup … &` does not survive the shell or tool-call that started
    it — and waits until `/health` reports `"whisper":true`. Idempotent. Cold start compiles
    Metal shaders once (~30-60 s); warm start is ~1 s. On a WARN, read `/tmp/interview-ai/server.log`.
@@ -40,7 +53,7 @@ apps and has no hiding features. Use it only where AI assistance is allowed or d
      the answer card into an always-on-top window.
    - The header carries the honest instruments: transcription time, model, first token,
      question→voice, and tokens spent this session.
-6. **Stop**: `bash ${CLAUDE_PLUGIN_ROOT}/server/stop.sh` stops the sidecar and the whisper
+6. **Stop**: `bash $ROOT/server/stop.sh` stops the sidecar and the whisper
    server, and with them any capture. To pause capture but keep the session, press **System**
    again. Screenshots live in `/tmp/interview-ai/`, pruned to the last 40.
 
