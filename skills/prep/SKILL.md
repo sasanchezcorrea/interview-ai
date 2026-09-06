@@ -1,6 +1,6 @@
 ---
 name: prep
-description: Build the candidate dossier that Interview AI uses to answer in the user's real voice and experience. Reads LifeOS identity, resume, projects, TELOS and engram memories, matches them to a pasted job description, and writes ~/.claude/LIFEOS/USER/INTERVIEW_AI/dossier.md + jd.md. USE WHEN the user says "interview-ai prep", "prepara interview ai", "prepárame para la entrevista de X", "dossier de entrevista", "prepare my interview dossier", "load the job description for the copilot", or pastes a job offer and asks Interview AI to use it. NOT FOR the TELOS context interview (/interview) or resume writing.
+description: Build the candidate dossier that Interview AI uses to answer in the user's real voice and experience. Reads LifeOS identity, resume, projects, TELOS and engram memories, matches them to a pasted job description, and writes $IAI_USER_DIR (default ~/.interview-ai, or the LifeOS folder when it exists)/dossier.md + jd.md. USE WHEN the user says "interview-ai prep", "prepara interview ai", "prepárame para la entrevista de X", "dossier de entrevista", "prepare my interview dossier", "load the job description for the copilot", or pastes a job offer and asks Interview AI to use it. NOT FOR the TELOS context interview (/interview) or resume writing.
 ---
 
 <!-- The product ships in English; the Spanish trigger phrases stay bilingual on purpose,
@@ -19,8 +19,8 @@ The live brain runs as `claude -p` without CLAUDE.md, memories or MCP, so everyt
 ## Steps
 
 1. Read the input files. Skip placeholders marked `(interview …)` or `[…]`; never invent content for them.
-2. Save the job description verbatim to `~/.claude/LIFEOS/USER/INTERVIEW_AI/jd.md` under a `# Job / meeting context` heading, followed by 5-8 bullets: what the role really tests, likely question themes, and vocabulary to mirror.
-3. Write `~/.claude/LIFEOS/USER/INTERVIEW_AI/dossier.md` with these sections, in English (the interview language), even when the user writes to you in another language, each fact tagged with its source file or memory id:
+2. Save the job description verbatim to `$IAI_USER_DIR (default ~/.interview-ai, or the LifeOS folder when it exists)/jd.md` under a `# Job / meeting context` heading, followed by 5-8 bullets: what the role really tests, likely question themes, and vocabulary to mirror.
+3. Write `$IAI_USER_DIR (default ~/.interview-ai, or the LifeOS folder when it exists)/dossier.md` with these sections, in English (the interview language), even when the user writes to you in another language, each fact tagged with its source file or memory id:
    - **Profile in 3 lines** — who the candidate is, seniority, current focus.
    - **Stack and honest level** — technologies with honest depth (production / prototype / read about). Honesty beats breadth: the cue must never claim more than this table.
    - **STAR stories (6-8)** — one paragraph each: situation, task, action, result with numbers. Prefer engram-sourced stories (real incidents, decisions, metrics). Map each to the role's likely themes.
