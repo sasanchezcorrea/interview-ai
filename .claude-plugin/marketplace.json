@@ -8,9 +8,14 @@
   "plugins": [
     {
       "name": "interview-ai",
-      "description": "Live interview copilot: transcribes the call, reads the shared screen, and puts the line to say next on your own panel. Output goes only to the candidate — never to the shared screen.",
+      "description": "Live interview copilot: transcribes the call, reads the shared screen, and puts the line to say next on your own panel. Output goes only to the candidate \u2014 never to the shared screen.",
       "source": "./",
-      "category": "productivity"
+      "category": "productivity",
+      "displayName": "Interview AI",
+      "author": {
+        "name": "Santiago Sanchez Correa"
+      },
+      "homepage": "https://github.com/sasanchezcorrea/interview-ai"
     }
   ]
 }

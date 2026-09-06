@@ -13,5 +13,7 @@
     "transcription",
     "whisper",
     "real-time"
-  ]
+  ],
+  "displayName": "Interview AI",
+  "license": "MIT"
 }
