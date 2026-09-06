@@ -14,6 +14,9 @@ if [ ! -s "$DEST" ]; then
   curl -L --fail --progress-bar -o "$DEST.part" "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$SIZE.bin"
   mv "$DEST.part" "$DEST"
 fi
+# The native helper is what makes capture work with no picker and no share-audio checkbox.
+# install.sh downloads the published binary and verifies its checksum, falling back to a build.
+bash "$(cd "$(dirname "${BASH_SOURCE[0]}")/../helper" && pwd)/install.sh" || echo "WARN: native helper unavailable — the browser capture path still works"
 command -v claude >/dev/null || echo "WARN: claude CLI not found on PATH (the brain needs it)"
 command -v bun >/dev/null || echo "WARN: bun not found on PATH (the server needs it)"
 echo "OK  whisper-server: $(command -v whisper-server)"

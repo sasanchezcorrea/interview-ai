@@ -7,8 +7,9 @@ only what actually happened — never claim the panel is ready without the healt
 
 1. Run `${CLAUDE_PLUGIN_ROOT}/server/start.sh`. It is idempotent: if the sidecar is already
    running it says so and exits 0. First start loads the whisper model and can take ~90s.
-2. If it fails because a dependency is missing (bun, whisper-server, ffmpeg, the model file),
-   run `${CLAUDE_PLUGIN_ROOT}/server/setup.sh` once, then retry step 1. Do not try to work
+2. If it fails because a dependency is missing (bun, whisper-server, ffmpeg, the model file,
+   the native helper), run `${CLAUDE_PLUGIN_ROOT}/server/setup.sh` once, then retry step 1.
+   Setup also fetches the signed capture helper and checks its checksum. Do not try to work
    around a missing dependency.
 3. Confirm with `curl -s http://127.0.0.1:31338/health` that `"whisper":true` before saying it
    is ready.
